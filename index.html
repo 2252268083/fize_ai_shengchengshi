@@ -266,6 +266,13 @@
             padding: 40px 0;
             font-size: 16px;
         }
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+            align-items: center;
+        }
         .btn-submit {
             background: #22c55e;
             color: white;
@@ -276,15 +283,35 @@
             font-weight: 600;
             cursor: pointer;
             transition: 0.2s;
-            margin-top: 8px;
         }
         .btn-submit:hover {
             background: #16a34a;
+        }
+        .btn-nav {
+            background: #e2e8f0;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-nav:hover {
+            background: #cbd5e1;
+        }
+        .btn-nav.primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-nav.primary:hover {
+            background: #2563eb;
         }
         .filter-tabs {
             display: flex;
             gap: 8px;
             margin-bottom: 12px;
+            flex-wrap: wrap;
         }
         .filter-tabs button {
             padding: 4px 16px;
@@ -303,11 +330,20 @@
         .filter-tabs button:hover:not(.active) {
             background: #e2e8f0;
         }
+        .keyboard-hint {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-left: 12px;
+        }
         @media (max-width: 600px) {
             .container {
                 padding: 16px;
             }
             .status-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .btn-group {
                 flex-direction: column;
                 align-items: stretch;
             }
@@ -335,6 +371,7 @@
             <div class="info">
                 共 <span id="totalCount">0</span> 题 &nbsp;|&nbsp; 当前 <span id="currentIdxDisplay">1</span>
                 &nbsp;|&nbsp; <span id="filterInfo">全部</span>
+                &nbsp;|&nbsp; 错题 <span id="wrongCount">0</span>
             </div>
             <div class="nav-area">
                 <button onclick="goQuestion(-1)">◀ 上一题</button>
@@ -350,6 +387,7 @@
                 <button class="active" data-filter="all" onclick="setFilter('all')">全部</button>
                 <button data-filter="single" onclick="setFilter('single')">单选题</button>
                 <button data-filter="judge" onclick="setFilter('judge')">判断题</button>
+                <button data-filter="wrong" onclick="setFilter('wrong')">📕 错题本</button>
             </div>
         </div>
 
@@ -363,7 +401,12 @@
                 <div id="feedback" class="feedback" style="display:none;"></div>
             </div>
             <div class="progress-stats" id="progressStats"></div>
-            <button class="btn-submit" onclick="submitAll()">📊 提交并查看成绩</button>
+            <div class="btn-group">
+                <button class="btn-nav" onclick="goQuestion(-1)">◀ 上一题</button>
+                <button class="btn-nav" onclick="goQuestion(1)">下一题 ▶</button>
+                <button class="btn-submit" onclick="submitAll()">📊 提交并查看成绩</button>
+                <span class="keyboard-hint">快捷键: ←/→ 或 W/S 或 A/D</span>
+            </div>
         </div>
 
         <div id="emptyMsg" class="empty-msg">⬆️ 请粘贴题目或上传文件后点击“加载题目”开始练习</div>
@@ -374,30 +417,27 @@
         // 全局变量
         // ============================================================
         let questions = [];
-        let answered = {};
+        let answered = {};              // 记录每道题用户选择的选项（题号 -> 选项标签）
         let correctCount = 0;
         let filterType = 'all';
         let filteredIndices = [];
         let currentFilteredPos = 0;
+        let wrongSet = new Set();       // 存储错题的题号（用于错题本）
 
         // ============================================================
-        // 核心解析器（专为您的题库格式设计）
+        // 核心解析器
         // ============================================================
         function parseQuestions(text) {
             const lines = text.split('\n');
             const result = [];
-
-            // 第一步：按题号分割（匹配 "数字. " 或 "数字、" 开头的行）
             let currentBlock = [];
             let currentNum = 0;
 
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i];
                 let trimmed = line.trim();
-                // 检测题号行：数字. 或 数字、 或 数字）
                 let match = trimmed.match(/^(\d+)\s*[.、）\)]\s*/);
                 if (match) {
-                    // 如果当前块有内容，先保存
                     if (currentBlock.length > 0 && currentNum > 0) {
                         let q = parseBlock(currentBlock, currentNum);
                         if (q) result.push(q);
@@ -405,46 +445,33 @@
                     currentNum = parseInt(match[1]);
                     currentBlock = [trimmed];
                 } else {
-                    // 如果还没遇到题号，跳过
                     if (currentNum === 0) continue;
                     currentBlock.push(trimmed);
                 }
             }
-            // 处理最后一个块
             if (currentBlock.length > 0 && currentNum > 0) {
                 let q = parseBlock(currentBlock, currentNum);
                 if (q) result.push(q);
             }
-
-            // 按题号排序
             result.sort((a, b) => a.id - b.id);
             return result;
         }
 
-        // 解析单个题目块
         function parseBlock(block, num) {
             if (!block || block.length === 0) return null;
-
-            // 合并所有行
             let fullText = block.join('\n');
-
-            // 提取题干（第一行）
             let firstLine = block[0] || '';
-            // 去除题号前缀
             let title = firstLine.replace(/^\d+\s*[.、）\)]\s*/, '').trim();
 
-            // 提取答案（从题号行或题干中找（B）这样的标记）
             let answer = null;
             let ansMatch = fullText.match(/[（(]\s*([A-Da-dvVxX√×])\s*[）)]/);
             if (ansMatch) {
                 answer = ansMatch[1].toUpperCase();
-                // 从题干中移除答案标记，避免显示在题干中
                 title = title.replace(/[（(]\s*[A-Da-dvVxX√×]\s*[）)]/, '').trim();
             }
 
-            // 提取选项（匹配 A. 或 A、 开头的行）
-            let optLines = [];
             let optionMap = {};
+            let optLines = [];
             for (let line of block) {
                 let m = line.match(/^([A-D])\s*[.、．]\s*(.*)/);
                 if (m) {
@@ -455,7 +482,6 @@
                 }
             }
 
-            // 提取解析（匹配 **解析：** 或 解析：）
             let explanation = '';
             for (let line of block) {
                 let clean = line.replace(/\*\*/g, '').trim();
@@ -464,7 +490,6 @@
                     break;
                 }
             }
-            // 如果没找到，尝试从块中搜索
             if (!explanation) {
                 for (let line of block) {
                     let clean = line.replace(/\*\*/g, '').trim();
@@ -478,22 +503,16 @@
                 }
             }
 
-            // 判断是单选还是判断
-            // 如果有 4 个选项且是 A B C D，则是单选题
-            // 否则判断为判断题
             let isSingle = (optLines.length >= 4 && optionMap['A'] && optionMap['B'] && optionMap['C'] && optionMap['D']);
 
             if (isSingle) {
-                // 单选题
                 let options = [
                     { label: 'A', text: optionMap['A'] || '' },
                     { label: 'B', text: optionMap['B'] || '' },
                     { label: 'C', text: optionMap['C'] || '' },
                     { label: 'D', text: optionMap['D'] || '' }
                 ];
-                // 如果选项为空，则说明解析失败
                 if (!options[0].text && !options[1].text) return null;
-
                 return {
                     id: num,
                     type: 'single',
@@ -505,20 +524,13 @@
                     isCorrect: null,
                 };
             } else {
-                // 判断题
-                // 题干可能包含答案标记，去掉它
                 let jTitle = title;
-                // 如果题目以（ ）开头，去掉
                 jTitle = jTitle.replace(/^[（(]\s*[vVxX√×]?\s*[）)]\s*/, '');
-                // 如果题目中还有其他括号标记，也去掉
                 jTitle = jTitle.replace(/[（(]\s*[vVxX√×]\s*[）)]/, '').trim();
-
-                // 如果没有提取到答案，尝试从题干中再找
                 if (!answer) {
                     let m = firstLine.match(/[（(]\s*([vVxX√×])\s*[）)]/);
                     if (m) answer = m[1].toUpperCase();
                 }
-
                 return {
                     id: num,
                     type: 'judge',
@@ -536,7 +548,7 @@
         }
 
         // ============================================================
-        // 渲染
+        // 渲染和交互
         // ============================================================
         function renderQuestion() {
             if (!questions.length || filteredIndices.length === 0) {
@@ -558,9 +570,13 @@
             document.getElementById('currentIdxDisplay').textContent = currentFilteredPos + 1;
             document.getElementById('jumpInput').value = currentFilteredPos + 1;
             document.getElementById('totalCount').textContent = filteredIndices.length;
+            document.getElementById('wrongCount').textContent = wrongSet.size;
 
-            const filterLabel = filterType === 'all' ? '全部' : (filterType === 'single' ? '单选题' : '判断题');
-            document.getElementById('filterInfo').textContent = `${filterLabel} (${filteredIndices.length}/${questions.length})`;
+            const filterLabel = filterType === 'all' ? '全部' :
+                (filterType === 'single' ? '单选题' :
+                    (filterType === 'judge' ? '判断题' : '📕 错题本'));
+            document.getElementById('filterInfo').textContent =
+                `${filterLabel} (${filteredIndices.length}/${questions.length})`;
 
             document.getElementById('qNumber').textContent = q.id;
             document.getElementById('qType').textContent = q.type === 'single' ? '单选题' : '判断题';
@@ -617,6 +633,7 @@
             document.getElementById('progressStats').innerHTML = `
                 <span>📝 已答：${answeredCount} / ${questions.length}</span>
                 <span>✅ 正确：${correctCount}</span>
+                <span>📕 错题：${wrongSet.size}</span>
             `;
         }
 
@@ -624,8 +641,18 @@
             const q = questions[qIdx];
             if (q.userAnswer !== null) return;
             q.userAnswer = label;
-            if (label === q.answer) { q.isCorrect = true;
-                correctCount++; } else { q.isCorrect = false; }
+            const isCorrect = (label === q.answer);
+            q.isCorrect = isCorrect;
+            if (isCorrect) {
+                correctCount++;
+                // 如果该题在错题本中，答对后移除（表示已掌握）
+                if (wrongSet.has(q.id)) {
+                    wrongSet.delete(q.id);
+                }
+            } else {
+                // 答错，加入错题本
+                wrongSet.add(q.id);
+            }
             answered[q.id] = label;
             renderQuestion();
         }
@@ -656,7 +683,7 @@
                 if (q.userAnswer === q.answer) correct++;
             }
             const percent = (correct / total * 100).toFixed(1);
-            alert(`📊 提交完成！\n\n总题数：${total}\n已答：${answeredCount}\n正确：${correct}\n得分：${percent}%`);
+            alert(`📊 提交完成！\n\n总题数：${total}\n已答：${answeredCount}\n正确：${correct}\n得分：${percent}%\n错题数：${wrongSet.size}`);
         }
 
         // ============================================================
@@ -667,14 +694,30 @@
             document.querySelectorAll('.filter-tabs button').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.filter === type);
             });
-            filteredIndices = questions.map((q, idx) => ({ idx, type: q.type }))
-                .filter(item => filterType === 'all' || item.type === filterType)
-                .map(item => item.idx);
+
+            let indices = [];
+            if (type === 'all') {
+                indices = questions.map((_, idx) => idx);
+            } else if (type === 'single') {
+                indices = questions.map((q, idx) => ({ idx, type: q.type }))
+                    .filter(item => item.type === 'single')
+                    .map(item => item.idx);
+            } else if (type === 'judge') {
+                indices = questions.map((q, idx) => ({ idx, type: q.type }))
+                    .filter(item => item.type === 'judge')
+                    .map(item => item.idx);
+            } else if (type === 'wrong') {
+                indices = questions.map((q, idx) => ({ idx, id: q.id }))
+                    .filter(item => wrongSet.has(item.id))
+                    .map(item => item.idx);
+            }
+            filteredIndices = indices;
             if (filteredIndices.length === 0) {
                 document.getElementById('questionCard').style.display = 'none';
                 document.getElementById('statusBar').style.display = 'none';
                 document.getElementById('emptyMsg').style.display = 'block';
-                document.getElementById('emptyMsg').textContent = '当前筛选下没有题目，请更换筛选条件。';
+                document.getElementById('emptyMsg').textContent =
+                    type === 'wrong' ? '🎉 错题本为空，继续加油！' : '当前筛选下没有题目，请更换筛选条件。';
                 return;
             }
             currentFilteredPos = 0;
@@ -698,6 +741,7 @@
             questions = parsed;
             answered = {};
             correctCount = 0;
+            wrongSet.clear();
             currentFilteredPos = 0;
             filterType = 'all';
             filteredIndices = questions.map((_, idx) => idx);
@@ -749,7 +793,42 @@
         }
 
         // ============================================================
-        // 内置示例数据（您题库的前10题）
+        // 键盘快捷键
+        // ============================================================
+        document.addEventListener('keydown', function(e) {
+            // 如果焦点在输入框或文本区域，不干扰
+            const tag = e.target.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea') return;
+
+            const key = e.key;
+            let handled = false;
+            // 左箭头 或 A 或 W（上一题）
+            if (key === 'ArrowLeft' || key === 'a' || key === 'A' || key === 'w' || key === 'W') {
+                goQuestion(-1);
+                handled = true;
+                e.preventDefault();
+            }
+            // 右箭头 或 D 或 S（下一题）
+            else if (key === 'ArrowRight' || key === 'd' || key === 'D' || key === 's' || key === 'S') {
+                goQuestion(1);
+                handled = true;
+                e.preventDefault();
+            }
+            // 可选：上下箭头也控制
+            else if (key === 'ArrowUp') {
+                goQuestion(-1);
+                handled = true;
+                e.preventDefault();
+            } else if (key === 'ArrowDown') {
+                goQuestion(1);
+                handled = true;
+                e.preventDefault();
+            }
+            // 数字快捷键（1-4选择选项） 可扩展，暂不实现
+        });
+
+        // ============================================================
+        // 内置示例数据（前10题）
         // ============================================================
         const sampleData =
             `1. 图灵测试是图灵在（ ）年在论文中《计算机与智能》中提出的。
