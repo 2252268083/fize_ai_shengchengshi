@@ -176,7 +176,7 @@ a{color:var(--brand);text-decoration:none}
 .quiz-body{display:grid;grid-template-columns:minmax(0,1fr) 306px;gap:18px;align-items:start}
 .q-card{
   background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 26px 18px;
-  box-shadow:var(--shadow);min-height:400px;
+  box-shadow:var(--shadow);min-height:400px;min-width:0;
 }
 .q-head{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12.5px;margin-bottom:12px}
 .q-head .num{color:var(--brand);font-weight:800;font-size:13px}
@@ -331,7 +331,7 @@ select{
 .drawer-btn{display:none}
 @media (max-width:900px){
   .paper-grid,.mini-grid{grid-template-columns:1fr}
-  .quiz-body{grid-template-columns:1fr}
+  .quiz-body{grid-template-columns:minmax(0,1fr)}
   .side{
     position:fixed;right:0;top:0;bottom:0;width:300px;max-width:86vw;border-radius:0;z-index:50;
     transform:translateX(105%);transition:.24s;overflow:auto;padding-top:20px;box-shadow:-10px 0 40px rgba(15,23,42,.18);
@@ -353,6 +353,10 @@ select{
   .brand .logo{width:26px;height:26px;border-radius:8px;font-size:12px}
   .top-link{padding:6px 8px;font-size:12px;border-radius:9px}
   .cell{font-size:10.5px}
+  /* v2.4.0 手机端：底部操作行换行不溢出 + 触控区加大 */
+  .q-foot{flex-wrap:wrap;row-gap:8px}
+  .q-foot .spacer{display:none}
+  .q-foot .btn{min-height:38px}
 }
 /* start dialog */
 .start-modal{max-width:480px}
