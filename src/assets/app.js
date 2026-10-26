@@ -102,6 +102,43 @@
     return Math.max(300, Math.round(EXAM_SECONDS * n / 100));
   }
 
+  /* 清空某模块（按题型）已答答案与标记，并重置该模块会话 */
+  function clearModuleAnswers(p, mod) {
+    var st = pstate(p.id);
+    moduleQuestions(p, mod).forEach(function (q) {
+      delete st.answers[q.key];
+      delete st.flags[q.key];
+    });
+    if (st.sessions[mod]) {
+      var ms = st.sessions[mod];
+      ms.order = null; ms.idx = 0; ms.done = false; ms.score = null; ms.total = 0;
+      ms.used = 0; ms.deadline = 0; ms.random = false; ms.at = 0;
+    }
+    save();
+  }
+
+  /* 清空整卷已答答案与标记，并重置全部模块会话 */
+  function clearPaperAnswers(pid) {
+    var st = pstate(pid);
+    Object.keys(st.answers).forEach(function (k) { delete st.answers[k]; });
+    Object.keys(st.flags).forEach(function (k) { delete st.flags[k]; });
+    Object.keys(st.sessions).forEach(function (m) {
+      var ms = st.sessions[m];
+      ms.order = null; ms.idx = 0; ms.done = false; ms.score = null; ms.total = 0;
+      ms.used = 0; ms.deadline = 0; ms.random = false; ms.at = 0;
+    });
+    save();
+  }
+
+  /* 重做某模块：确认后清空本模块已答再重新开始 */
+  function redoModule(pid, mod, mode, random) {
+    var p = BY_ID[pid];
+    showModal('重做本模块？', '将清空「' + modLabel(mod) + '」的已答答案与标记（错题本、收藏、历史成绩保留），然后重新开始。', '重做', function () {
+      clearModuleAnswers(p, mod);
+      beginSession(pid, mod, mode, { fresh: true, random: !!random });
+    }, '取消');
+  }
+
   function moduleAnswered(pid, mod) {
     var p = BY_ID[pid], s = db.papers[pid];
     if (!p || !s) return 0;
@@ -157,7 +194,7 @@
   function typeTagClass(t) { return t === 'multi' ? 'tag multi' : (t === 'judge' ? 'tag judge' : 'tag'); }
 
   /* ---------------- modal ---------------- */
-  function showModal(title, text, okText, onOk, cancelText) {
+  function showModal(title, text, okText, onOk, cancelText, onCancel) {
     var m = cloneTpl('tpl-modal');
     $('.modal h3', m).textContent = title;
     $('.modal p', m).textContent = text;
@@ -171,7 +208,7 @@
       if (!b) { if (e.target === m) close(); return; }
       var act = b.getAttribute('data-act');
       if (act === 'modal-ok') { close(); if (onOk) onOk(); }
-      else if (act === 'modal-cancel') { close(); }
+      else if (act === 'modal-cancel') { close(); if (onCancel) onCancel(); }
     });
     return close;
   }
@@ -187,12 +224,27 @@
   function cur() { return sess.qs[sess.idx]; }
 
   /* ---------------- session ---------------- */
+  function enterQuiz(pid, mod, mode, st, ms, list) {
+    var p = BY_ID[pid];
+    sess = {
+      pid: pid, mod: mod, title: p.title + ' · ' + modLabel(mod),
+      mode: mode, qs: list, answers: st.answers, flags: st.flags,
+      idx: Math.min(ms.idx || 0, list.length - 1),
+      st: st, ms: ms, persist: true, startAt: Date.now(), pending: {},
+      deadline: mode === 'exam' ? ms.deadline : 0, limit: examLimit(list.length),
+      random: !!ms.random, done: false
+    };
+    route = 'quiz';
+    render();
+  }
+
   function beginSession(pid, mod, mode, cfg) {
     var p = BY_ID[pid];
     var st = pstate(pid);
     var ms = modState(pid, mod);
     cfg = cfg || {};
-    if (cfg.fresh || !ms.order) {
+    var fresh = cfg.fresh || !ms.order;
+    if (fresh) {
       var qs = moduleQuestions(p, mod);
       if (cfg.random) shuffle(qs);
       ms.order = qs.map(function (q) { return q.key; });
@@ -207,9 +259,25 @@
       ms.at = Date.now();
     } else {
       if (!ms.total) ms.total = ms.order.length;
-      if (mode === 'exam' && !ms.deadline) ms.deadline = Date.now() + examLimit(ms.total) * 1000;
-      if (mode !== 'exam') ms.deadline = 0;
       ms.mode = mode;
+      if (mode !== 'exam') {
+        ms.deadline = 0;
+      } else if (!ms.deadline) {
+        ms.deadline = Date.now() + examLimit(ms.total) * 1000;
+      } else if (ms.deadline < Date.now()) {
+        // 考试超时续做：弹窗选择，不再进入后立即自动交卷
+        showModal('上次考试已超时', '作答已保存，但考试时间已过。可「重新计时继续」（保留已答，重新给足考试时长），或「重做本卷」（清空本模块已答后重新开始）。',
+          '重新计时继续', function () {
+            ms.deadline = Date.now() + examLimit(ms.total || ms.order.length) * 1000;
+            ms.mode = mode;
+            var list = ms.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+            enterQuiz(pid, mod, mode, st, ms, list);
+          }, '重做本卷', function () {
+            clearModuleAnswers(p, mod);
+            beginSession(pid, mod, mode, { fresh: true, random: cfg.random });
+          });
+        return;
+      }
     }
     var list = ms.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
     if (!list.length) {
@@ -217,16 +285,7 @@
       ms.order = list.map(function (q) { return q.key; });
       ms.total = list.length;
     }
-    sess = {
-      pid: pid, mod: mod, title: p.title + ' · ' + modLabel(mod),
-      mode: mode, qs: list, answers: st.answers, flags: st.flags,
-      idx: Math.min(ms.idx || 0, list.length - 1),
-      st: st, ms: ms, persist: true, startAt: Date.now(), pending: {},
-      deadline: mode === 'exam' ? ms.deadline : 0, limit: examLimit(list.length),
-      random: !!ms.random, done: false
-    };
-    route = 'quiz';
-    render();
+    enterQuiz(pid, mod, mode, st, ms, list);
   }
 
   function beginSet(qs, title, mode, random) {
@@ -383,8 +442,20 @@
           ' · ' + (recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, recentMod) + '/' + (recent.total || 0);
         resume.addEventListener('click', function () { beginSession(p.id, recentMod, recent.mode || 'exam', {}); });
       }
-      $('.btn-primary', card).addEventListener('click', function () { openPaper(p.id, 'exam'); });
-      $('[data-act="card-practice"]', card).addEventListener('click', function () { openPaper(p.id, 'practice'); });
+      function startAll(mode) {
+        var st = pstate(p.id);
+        if (Object.keys(st.answers).length === 0) {
+          beginSession(p.id, 'all', mode, { fresh: true, random: false });
+          return;
+        }
+        showModal('重新开始整套？', '本卷已有作答记录。重新开始将清空本卷全部已答答案与标记（错题本、收藏、历史成绩保留）。', '清空并开始', function () {
+          clearPaperAnswers(p.id);
+          beginSession(p.id, 'all', mode, { fresh: true, random: false });
+        }, '取消');
+      }
+      $('.btn-primary', card).addEventListener('click', function () { startAll('exam'); });
+      $('[data-act="card-practice"]', card).addEventListener('click', function () { startAll('practice'); });
+      $('[data-act="card-modules"]', card).addEventListener('click', function () { openPaper(p.id, pick.mode); });
       grid.appendChild(card);
     });
 
@@ -441,7 +512,7 @@
     }
     var picks = pool.slice(0, 50).map(function (q) {
       return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
-    }).sort(function (a, b) { return a.pid < b.pid ? -1 : (a.pid > b.pid ? 1 : a.n - b.n); });
+    });
     beginSet(picks, '随机模拟考（50 题）', 'exam');
   }
 
@@ -480,13 +551,18 @@
       var primary = $('[data-act="mod-start"]', card);
       primary.textContent = running ? '继续' : (ms && ms.done ? '再做一次' : '开始');
       primary.addEventListener('click', function () {
-        if (running) beginSession(p.id, mod, ms.mode || pick.mode, {});
-        else beginSession(p.id, mod, pick.mode, { fresh: true, random: false });
+        if (running) {
+          beginSession(p.id, mod, pick.mode, {});
+        } else if (ms && ms.done) {
+          redoModule(p.id, mod, pick.mode, false);
+        } else {
+          beginSession(p.id, mod, pick.mode, { fresh: true, random: false });
+        }
       });
       var redo = $('[data-act="mod-redo"]', card);
       redo.classList.toggle('hidden', !running);
       redo.addEventListener('click', function () {
-        beginSession(p.id, mod, pick.mode, { fresh: true, random: false });
+        redoModule(p.id, mod, pick.mode, false);
       });
       list.appendChild(card);
     });
@@ -734,9 +810,11 @@
       if (a === c) removeWrong(q); else addWrong(q);
     });
     if (s.persist) {
+      var snap = {};
+      s.qs.forEach(function (q) { if (s.answers[q.key]) snap[q.key] = s.answers[q.key]; });
       db.history.push({
         pid: s.pid, mod: s.mod || null, mode: s.mode, score: r.score, total: r.total,
-        at: Date.now(), used: Math.round(used), random: !!s.random
+        at: Date.now(), used: Math.round(used), random: !!s.random, snap: snap
       });
       if (db.history.length > 200) db.history = db.history.slice(-200);
       save();
@@ -772,10 +850,11 @@
     }, 60);
 
     var kpis = $('#resKpis', node);
-    [['用时', fmtUsed(lastResult.used)],
-     ['单选题', r.stat.single[0] + ' / ' + r.stat.single[1]],
-     ['多选题', r.stat.multi[0] + ' / ' + r.stat.multi[1]],
-     ['判断题', r.stat.judge[0] + ' / ' + r.stat.judge[1]]].forEach(function (x) {
+    var kpiList = [['用时', fmtUsed(lastResult.used)]];
+    TYPES.forEach(function (t) {
+      if (r.stat[t][1] > 0) kpiList.push([typeLabel(t), r.stat[t][0] + ' / ' + r.stat[t][1]]);
+    });
+    kpiList.forEach(function (x) {
       var k = cloneTpl('tpl-kpi');
       $('span', k).textContent = x[0];
       $('b', k).textContent = x[1];
@@ -814,7 +893,7 @@
     toggle.addEventListener('click', function () { revOnlyWrong = !revOnlyWrong; paintReview(); });
 
     $('[data-act="retry"]', node).addEventListener('click', function () {
-      if (s.persist && s.pid) beginSession(s.pid, s.mod, s.mode, { fresh: true, random: s.random });
+      if (s.persist && s.pid) redoModule(s.pid, s.mod || 'all', s.mode, s.random);
       else beginSet(s.qs.map(function (q) { return q; }), s.title, s.mode, s.random);
     });
     $('[data-act="to-paper"]', node).addEventListener('click', function () {
@@ -830,51 +909,76 @@
   function viewList(kind) {
     var node = cloneTpl('tpl-list');
     var map = kind === 'wrong' ? db.wrong : db.fav;
-    var keys = Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); });
     var title = kind === 'wrong' ? '错题本' : '我的收藏';
     $('#listTitle', node).textContent = title;
-    $('#listDesc', node).textContent = kind === 'wrong'
-      ? '共 ' + keys.length + ' 道。答对后会自动移出；也可手动移除。'
-      : '共 ' + keys.length + ' 道。收藏的题目可以随时回看。';
-
+    var desc = $('#listDesc', node);
     var body = $('#listBody', node);
-    var qs = keys.map(function (k) {
-      var q = ALL.filter(function (x) { return x.key === k; })[0];
-      return q;
-    }).filter(Boolean);
+    var filter = 'all';
 
-    if (!qs.length) {
-      body.appendChild(el('div', 'empty', kind === 'wrong' ? '还没有错题，去刷一套卷子吧 📚' : '还没有收藏，点题目右上角 ☆ 收藏'));
+    function allQs() {
+      return Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); })
+        .map(function (k) { return ALL.filter(function (x) { return x.key === k; })[0]; })
+        .filter(Boolean);
+    }
+    function visibleQs() {
+      var arr = allQs();
+      if (filter !== 'all') arr = arr.filter(function (q) { return q.t === filter; });
+      return arr;
+    }
+    function paint() {
+      body.innerHTML = '';
+      desc.textContent = kind === 'wrong'
+        ? '共 ' + allQs().length + ' 道。答对后会自动移出；也可手动移除。'
+        : '共 ' + allQs().length + ' 道。收藏的题目可以随时回看。';
+      var qs = visibleQs();
+      if (!qs.length) {
+        body.appendChild(el('div', 'empty', kind === 'wrong'
+          ? (filter === 'all' ? '还没有错题，去刷一套卷子吧 📚' : '该题型下没有错题')
+          : (filter === 'all' ? '还没有收藏，点题目右上角 ☆ 收藏' : '该题型下没有收藏')));
+      }
+      qs.forEach(function (q) {
+        var row = cloneTpl('tpl-row');
+        var tag = $('.tag', row);
+        tag.textContent = typeName(q.t);
+        tag.className = typeTagClass(q.t);
+        $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+        var c = correctOf(q);
+        $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+        $('[data-act="row-go"]', row).addEventListener('click', function () {
+          beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+        });
+        $('[data-act="row-del"]', row).addEventListener('click', function () {
+          delete map[q.key]; save(); paint();
+        });
+        body.appendChild(row);
+      });
     }
 
-    qs.forEach(function (q) {
-      var row = cloneTpl('tpl-row');
-      var tag = $('.tag', row);
-      tag.textContent = typeName(q.t);
-      tag.className = typeTagClass(q.t);
-      $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
-      var c = correctOf(q);
-      $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
-      $('[data-act="row-go"]', row).addEventListener('click', function () {
-        beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+    var filterRow = el('div', 'filter-row');
+    [['all', '全部'], ['single', '单选'], ['multi', '多选'], ['judge', '判断']].forEach(function (f) {
+      var b = el('button', 'fbtn' + (f[0] === 'all' ? ' on' : ''), f[1]);
+      b.addEventListener('click', function () {
+        filter = f[0];
+        $all('.fbtn', filterRow).forEach(function (x) { x.classList.toggle('on', x === b); });
+        paint();
       });
-      $('[data-act="row-del"]', row).addEventListener('click', function () {
-        delete map[q.key]; save(); render();
-      });
-      body.appendChild(row);
+      filterRow.appendChild(b);
     });
+    $('.panel', node).insertBefore(filterRow, body);
 
     $('[data-act="list-practice"]', node).addEventListener('click', function () {
+      var qs = visibleQs();
       if (!qs.length) { toast('列表是空的'); return; }
       beginSet(qs, title + ' · 重练', 'practice');
     });
     $('[data-act="list-clear"]', node).addEventListener('click', function () {
-      if (!qs.length) return;
+      if (!allQs().length) return;
       showModal('清空' + title + '？', '该操作不可撤销。', '清空', function () {
-        qs.forEach(function (q) { delete map[q.key]; });
-        save(); render();
+        allQs().forEach(function (q) { delete map[q.key]; });
+        save(); paint();
       });
     });
+    paint();
     return node;
   }
 
@@ -898,6 +1002,7 @@
         ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习');
       var meta = dateStr + ' · 用时 ' + fmtUsed(h.used || 0);
       if (h.random) meta += ' · 随机';
+      if (!h.snap) meta += ' · 旧记录(改答案后不重算)';
       $('.his-meta', row).textContent = meta;
       var b = $('.his-pct', row);
       b.textContent = pct + '%';
@@ -957,6 +1062,8 @@
       var pid = sel.value;
       var raw = ta.value.replace(/[，、；;]/g, '\n');
       var count = 0, bad = 0;
+      var ov = db.overrides[pid] = db.overrides[pid] || {};
+      var base = KEY[pid] || {};
       raw.split(/\r?\n/).forEach(function (line) {
         var t = line.trim();
         if (!t) return;
@@ -967,13 +1074,25 @@
         var p = BY_ID[pid];
         if (!p || !p.questions.some(function (q) { return q.n === no; })) { bad++; return; }
         if (!ans) { bad++; return; }
-        db.overrides[pid] = db.overrides[pid] || {};
-        db.overrides[pid][no] = ans;
-        count++;
+        if (ans === sortedLetters(base[no] || '')) delete ov[no];
+        else { ov[no] = ans; count++; }
+      });
+      // 按新答案重算有快照的历史记录得分
+      var rescored = 0;
+      db.history.forEach(function (h) {
+        if (!h.snap || h.pid !== pid) return;
+        var ok = 0, total = 0;
+        Object.keys(h.snap).forEach(function (k) {
+          var m = /^(\w)#(\d+)$/.exec(k);
+          if (!m || m[1] !== pid) return;
+          total++;
+          if (correctOf({ pid: pid, n: parseInt(m[2], 10) }) === h.snap[k]) ok++;
+        });
+        if (total) { h.score = ok; h.total = total; rescored++; }
       });
       save();
-      $('#keyStat', node).textContent = '本卷已修改 ' + Object.keys(db.overrides[pid] || {}).length + ' 题';
-      toast('已更新 ' + count + ' 题' + (bad ? '，' + bad + ' 行无法识别' : ''));
+      $('#keyStat', node).textContent = '本卷已修改 ' + Object.keys(ov).length + ' 题';
+      toast('已更新 ' + count + ' 题' + (bad ? '，' + bad + ' 行无法识别' : '') + (rescored ? '，已重算 ' + rescored + ' 条历史成绩' : ''));
       if (lastResult && route === 'result') render();
     });
     $('[data-act="key-export"]', node).addEventListener('click', function () {
