@@ -649,6 +649,17 @@
       return sess.pending[q.key];
     }
 
+    /* 练习模式答对后自动进入下一题；最后一题返回 false */
+    function autoNext() {
+      if (sess.idx < sess.qs.length - 1) {
+        sess.idx++;
+        persistPos();
+        rebuildQuestion();
+        return true;
+      }
+      return false;
+    }
+
     function choose(i) {
       var q = cur();
       var L = letterAt(i);
@@ -668,7 +679,10 @@
       setAnswer(q, L);
       if (sess.mode === 'practice') {
         var c = correctOf(q);
-        if (c && L === c) { removeWrong(q); } else if (c) { addWrong(q); }
+        if (c && L === c) {
+          removeWrong(q);
+          if (autoNext()) return; // 答对自动下一题
+        } else if (c) { addWrong(q); }
       }
       paintOptions();
       paintCard();
@@ -778,7 +792,10 @@
       if (!v) { toast('请先选择至少一个选项'); return; }
       setAnswer(q, v);
       var c = correctOf(q);
-      if (c && v === c) removeWrong(q); else if (c) addWrong(q);
+      if (c && v === c) {
+        removeWrong(q);
+        if (autoNext()) return; // 多选确认后答对自动下一题
+      } else if (c) { addWrong(q); }
       paintOptions(); paintCard(); paintFeedback();
     });
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
@@ -1289,7 +1306,15 @@
     var tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     var k = String(e.key || '').toUpperCase();
-    if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
+    if (k.length === 1 && '1234'.indexOf(k) >= 0) {
+      var q0 = cur();
+      var i0 = '1234'.indexOf(k);
+      if (i0 < q0.o.length) {
+        e.preventDefault();
+        var bts = $all('#qOpts .opt');
+        if (bts[i0]) bts[i0].click();
+      }
+    } else if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
       var q = cur();
       var i = 'ABCDEFGH'.indexOf(k);
       if (i < q.o.length) {
