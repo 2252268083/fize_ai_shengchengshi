@@ -225,7 +225,10 @@ a{color:var(--brand);text-decoration:none}
 }
 .side h4{margin:0 0 10px;font-size:13.5px;display:flex;align-items:center;gap:6px}
 .side h4 span{margin-left:auto;color:var(--ink-3);font-weight:500;font-size:12px}
-.cards{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}
+.cards{display:block}
+.card-group{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin-bottom:14px}
+.card-sep{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:11px;color:var(--ink-3);font-weight:600}
+.card-sep::after{content:"";flex:1;height:1px;background:var(--line)}
 .cell{
   aspect-ratio:1;border-radius:7px;border:1px solid var(--line);background:#fbfcff;color:var(--ink-2);
   font-size:11.5px;font-weight:600;display:grid;place-items:center;padding:0;transition:.12s;
@@ -413,6 +416,16 @@ select{
 .fbtn.on{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:600}
 .fbtn:hover{border-color:#c7d2fe;color:var(--brand)}
 
+/* v2.2.0：答题卡题型分组 */
+@media (max-width:900px){
+  .card-group{grid-template-columns:repeat(10,1fr)}
+}
+.his-review{flex:none;white-space:nowrap}
+@media (max-width:560px){
+  .his-review{font-size:11px;padding:5px 7px}
+  .card-group{grid-template-columns:repeat(8,1fr);gap:4px}
+}
+
 
 </style>
 </head>
@@ -450,7 +463,7 @@ select{
         <span class="chip">限时 90 分钟</span>
       </div>
       <div class="hero-actions">
-        <button class="btn btn-primary" data-act="random-exam">随机模拟考（50 题）</button>
+        <button class="btn btn-primary" data-act="random-exam">全库随机练习（300 题）</button>
         <button class="btn btn-ghost" data-act="open-wrong">错题重练</button>
       </div>
     </div>
@@ -679,6 +692,7 @@ select{
       <div class="qsub his-meta"></div>
     </div>
     <span class="ans-badge mid his-pct"></span>
+    <button class="btn btn-sm btn-ghost his-review hidden" data-act="his-review">回顾错题</button>
   </div>
 </template>
 
@@ -962,6 +976,7 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
   var lastResult = null;
   var revOnlyWrong = false;
   var tickTimer = null;
+  var reviewH = null;
 
   function cur() { return sess.qs[sess.idx]; }
 
@@ -1030,12 +1045,12 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
     enterQuiz(pid, mod, mode, st, ms, list);
   }
 
-  function beginSet(qs, title, mode, random) {
+  function beginSet(qs, title, mode, random, persistOpt) {
     if (random) shuffle(qs);
     sess = {
       pid: null, mod: null, title: title, mode: mode, qs: qs,
-      answers: {}, flags: {}, idx: 0, st: null, ms: null, persist: false,
-      startAt: Date.now(), pending: {},
+      answers: {}, flags: {}, idx: 0, st: null, ms: null,
+      persist: !!persistOpt, startAt: Date.now(), pending: {},
       deadline: mode === 'exam' ? Date.now() + Math.max(600, qs.length * 54) * 1000 : 0,
       limit: Math.max(600, qs.length * 54), done: false,
       random: !!random
@@ -1102,6 +1117,18 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
     if (db.wrong[q.key]) { delete db.wrong[q.key]; save(); }
   }
 
+  /* 某次练习记录中答错的题（key 数组）；基于答题快照与当前答案计算 */
+  function wrongKeysOf(h) {
+    if (!h || !h.snap) return [];
+    var out = [];
+    Object.keys(h.snap).forEach(function (k) {
+      var q = QMAP[k];
+      var c = q ? correctOf(q) : null;
+      if (c && h.snap[k] !== c) out.push(k);
+    });
+    return out;
+  }
+
   /* ---------------- timer ---------------- */
   function tick() {
     if (route !== 'quiz' || !sess) return;
@@ -1126,6 +1153,7 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
     else if (route === 'result') node = viewResult();
     else if (route === 'wrong') node = viewList('wrong');
     else if (route === 'fav') node = viewList('fav');
+    else if (route === 'review') node = viewReview();
     else if (route === 'history') node = viewHistory();
     else if (route === 'paper') node = viewPaper();
     else node = viewKey();
@@ -1144,7 +1172,7 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
   function paintNav() {
     $all('.top-link').forEach(function (b) {
       var nav = b.getAttribute('data-nav');
-      b.classList.toggle('active', nav === route || (route === 'result' && nav === 'home'));
+      b.classList.toggle('active', nav === route || (route === 'result' && nav === 'home') || (route === 'review' && nav === 'wrong'));
     });
     var wc = Object.keys(db.wrong).length;
     document.getElementById('navWrong').textContent = wc ? '(' + wc + ')' : '';
@@ -1211,7 +1239,7 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
       c.addEventListener('click', fn);
       return c;
     }
-    mini.appendChild(miniCard('🎲', '', '随机模拟考', '三套卷随机抽 50 题 · 45 分钟', function () {
+    mini.appendChild(miniCard('🎲', '', '全库随机练习', '三套卷全部 300 题随机 · 不限时练完', function () {
       startRandomExam();
     }));
     mini.appendChild(miniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
@@ -1247,15 +1275,10 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
   }
 
   function startRandomExam() {
-    var pool = ALL.slice();
-    for (var i = pool.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
-    }
-    var picks = pool.slice(0, 50).map(function (q) {
+    var picks = shuffle(ALL.slice()).map(function (q) {
       return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
     });
-    beginSet(picks, '随机模拟考（50 题）', 'exam');
+    beginSet(picks, '全库随机练习（300 题）', 'practice', false, true);
   }
 
   /* ---------------- paper modules ---------------- */
@@ -1354,18 +1377,26 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
       tick();
     }
 
-    // build answer card once
-    sess.qs.forEach(function (q, i) {
-      var c = cloneTpl('tpl-cell');
-      c.textContent = String(q.n);
-      c.setAttribute('data-idx', String(i));
-      c.addEventListener('click', function () {
-        sess.idx = i; persistPos();
-        rebuildQuestion();
-        var side = $('#sideCard', node);
-        if (side) side.classList.remove('open');
+    // build answer card once —— 按题型固定分组（单选→多选→判断），cell 用 data-idx 对应题序
+    var buckets = { single: [], multi: [], judge: [] };
+    sess.qs.forEach(function (q, i) { buckets[q.t].push(i); });
+    ['single', 'multi', 'judge'].forEach(function (t) {
+      if (!buckets[t].length) return;
+      cells.appendChild(el('div', 'card-sep', typeName(t)));
+      var group = el('div', 'card-group');
+      buckets[t].forEach(function (i) {
+        var c = cloneTpl('tpl-cell');
+        c.textContent = String(sess.qs[i].n);
+        c.setAttribute('data-idx', String(i));
+        c.addEventListener('click', function () {
+          sess.idx = i; persistPos();
+          rebuildQuestion();
+          var side = $('#sideCard', node);
+          if (side) side.classList.remove('open');
+        });
+        group.appendChild(c);
       });
-      cells.appendChild(c);
+      cells.appendChild(group);
     });
 
     function pendingOf(q) {
@@ -1450,9 +1481,12 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
 
     function paintCard() {
       var cellsArr = $all('.cell', cells);
+      var byIdx = {};
+      cellsArr.forEach(function (c) { byIdx[parseInt(c.getAttribute('data-idx'), 10)] = c; });
       var done = 0, flag = 0;
       sess.qs.forEach(function (q, i) {
-        var cell = cellsArr[i];
+        var cell = byIdx[i];
+        if (!cell) return;
         var d = !!sess.answers[q.key];
         if (d) done++;
         if (sess.flags[q.key]) flag++;
@@ -1656,6 +1690,7 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
     var desc = $('#listDesc', node);
     var body = $('#listBody', node);
     var filter = 'all';
+    var reviewMode = false;
 
     function allQs() {
       return Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); })
@@ -1667,10 +1702,45 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
       if (filter !== 'all') arr = arr.filter(function (q) { return q.t === filter; });
       return arr;
     }
+    function fmtDate(t) {
+      var d = new Date(t || Date.now());
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+    function reviewRows() {
+      var items = db.history.slice().reverse();
+      if (!items.length) {
+        body.appendChild(el('div', 'empty', '还没有练习记录，做完一套卷子后这里就能回顾 📚'));
+        return;
+      }
+      items.forEach(function (h) {
+        var row = el('div', 'row');
+        var left = el('div', 'grow');
+        left.appendChild(el('div', 'qtext', (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
+          ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习')));
+        left.appendChild(el('div', 'qsub', fmtDate(h.at) + ' · 得分 ' + h.score + '/' + (h.total || 100) +
+          ' · 用时 ' + fmtUsed(h.used || 0) + (h.random ? ' · 随机' : '')));
+        row.appendChild(left);
+        if (h.snap) {
+          var n = wrongKeysOf(h).length;
+          var btn = el('button', 'btn btn-sm btn-ghost', '错题 ' + n + ' 道 →');
+          btn.addEventListener('click', function () { reviewH = h; route = 'review'; render(); });
+          row.appendChild(btn);
+        } else {
+          row.appendChild(el('span', 'hint', '无快照，不可回顾'));
+        }
+        body.appendChild(row);
+      });
+    }
     function paint() {
       body.innerHTML = '';
+      if (reviewMode) {
+        desc.textContent = '按交卷顺序回顾每一次练习的错题（带快照的练习才可回顾）。';
+        reviewRows();
+        return;
+      }
       desc.textContent = kind === 'wrong'
-        ? '共 ' + allQs().length + ' 道。答对后会自动移出；也可手动移除。'
+        ? '共 ' + allQs().length + ' 道。答对后会自动移出；也可手动移除。每次交卷的错题可在上方「练习回顾」按次查看。'
         : '共 ' + allQs().length + ' 道。收藏的题目可以随时回看。';
       var qs = visibleQs();
       if (!qs.length) {
@@ -1708,6 +1778,26 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
     });
     $('.panel', node).insertBefore(filterRow, body);
 
+    if (kind === 'wrong') {
+      var tabRow = el('div', 'filter-row');
+      var tCur = el('button', 'fbtn on', '当前错题');
+      var tRev = el('button', 'fbtn', '练习回顾');
+      tCur.addEventListener('click', function () {
+        reviewMode = false;
+        tCur.classList.add('on'); tRev.classList.remove('on');
+        filterRow.style.display = '';
+        paint();
+      });
+      tRev.addEventListener('click', function () {
+        reviewMode = true;
+        tRev.classList.add('on'); tCur.classList.remove('on');
+        filterRow.style.display = 'none';
+        paint();
+      });
+      tabRow.appendChild(tCur); tabRow.appendChild(tRev);
+      $('.panel', node).insertBefore(tabRow, filterRow);
+    }
+
     $('[data-act="list-practice"]', node).addEventListener('click', function () {
       var qs = visibleQs();
       if (!qs.length) { toast('列表是空的'); return; }
@@ -1721,6 +1811,61 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
       });
     });
     paint();
+    return node;
+  }
+
+  /* ---------------- 练习回顾：查看某一次练习的错题 ---------------- */
+  function viewReview() {
+    var node = cloneTpl('tpl-list');
+    var h = reviewH || {};
+    $('#listTitle', node).textContent = '练习回顾';
+    var desc = $('#listDesc', node);
+    var body = $('#listBody', node);
+    var d = new Date(h.at || Date.now());
+    var dateStr = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+      ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    desc.textContent = (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') + ' · ' +
+      (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习') + ' · ' +
+      dateStr + ' · 得分 ' + h.score + '/' + (h.total || 100) + ' · 用时 ' + fmtUsed(h.used || 0) +
+      (h.random ? ' · 随机' : '');
+    var keys = wrongKeysOf(h);
+
+    var ops = el('div', 'filter-row');
+    var b1 = el('button', 'btn btn-sm btn-primary', '重练本次错题（' + keys.length + ' 道）');
+    b1.addEventListener('click', function () {
+      if (!keys.length) { toast('这次没有错题'); return; }
+      beginSet(keys.map(function (k) { return QMAP[k]; }).filter(Boolean), '练习回顾 · 错题重练', 'practice');
+    });
+    var b2 = el('button', 'btn btn-sm btn-ghost', '← 返回错题本');
+    b2.addEventListener('click', function () { route = 'wrong'; render(); });
+    ops.appendChild(b1); ops.appendChild(b2);
+    $('.panel', node).insertBefore(ops, body);
+
+    if (!keys.length) {
+      body.appendChild(el('div', 'empty', '这次练习全对，没有错题 🎉'));
+      return node;
+    }
+    keys.forEach(function (k) {
+      var q = QMAP[k];
+      if (!q) return;
+      var row = cloneTpl('tpl-row');
+      var tag = $('.tag', row);
+      tag.textContent = typeName(q.t);
+      tag.className = typeTagClass(q.t);
+      $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+      var c = correctOf(q);
+      $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+      $('[data-act="row-go"]', row).textContent = '重练';
+      $('[data-act="row-go"]', row).addEventListener('click', function () {
+        beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+      });
+      $('[data-act="row-del"]', row).textContent = '移除';
+      $('[data-act="row-del"]', row).addEventListener('click', function () {
+        if (db.wrong[k]) { delete db.wrong[k]; save(); }
+        toast('已移出错题本');
+      });
+      body.appendChild(row);
+    });
     return node;
   }
 
@@ -1749,6 +1894,12 @@ window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C
       var b = $('.his-pct', row);
       b.textContent = pct + '%';
       b.className = 'ans-badge ' + (pct >= 80 ? 'ok' : pct >= 60 ? 'mid' : 'bad') + ' his-pct';
+      var rv = $('[data-act="his-review"]', row);
+      if (h.snap) {
+        rv.classList.remove('hidden');
+        rv.textContent = '本次错题 ' + wrongKeysOf(h).length + ' 道 →';
+        rv.addEventListener('click', function () { reviewH = h; route = 'review'; render(); });
+      }
       list.appendChild(row);
     });
     $('[data-act="his-clear"]', node).addEventListener('click', function () {
