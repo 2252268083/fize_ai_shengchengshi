@@ -58,11 +58,56 @@
   function pstate(pid) {
     var s = db.papers[pid];
     if (!s) {
-      s = { answers: {}, flags: {}, idx: 0, mode: '', done: false, score: null, used: 0, deadline: 0,
-            types: null, random: false, order: null, total: 0 };
+      s = { answers: {}, flags: {}, sessions: {} };
       db.papers[pid] = s;
     }
+    if (!s.sessions) {
+      // v1 -> v2 迁移：原来的整卷状态变成 sessions.all
+      var sessions = {};
+      if (s.order || s.mode || (s.answers && Object.keys(s.answers).length)) {
+        sessions.all = {
+          idx: s.idx || 0, mode: s.mode || 'practice', order: s.order || null,
+          random: !!s.random, done: !!s.done, score: (s.score == null ? null : s.score),
+          total: s.total || 0, used: s.used || 0, deadline: s.deadline || 0, at: 0
+        };
+      }
+      s.sessions = sessions;
+      delete s.idx; delete s.mode; delete s.done; delete s.score; delete s.used;
+      delete s.deadline; delete s.types; delete s.random; delete s.order; delete s.total;
+    }
     return s;
+  }
+
+  function modState(pid, mod) {
+    var s = pstate(pid);
+    var ms = s.sessions[mod];
+    if (!ms) {
+      ms = { idx: 0, mode: '', order: null, random: false, done: false, score: null,
+             total: 0, used: 0, deadline: 0, at: 0 };
+      s.sessions[mod] = ms;
+    }
+    return ms;
+  }
+
+  function moduleQuestions(p, mod) {
+    if (mod === 'all') return p.questions.slice();
+    return p.questions.filter(function (q) { return q.t === mod; });
+  }
+
+  function modLabel(mod) {
+    return mod === 'all' ? '整套模拟' : typeLabel(mod);
+  }
+
+  function examLimit(n) {
+    return Math.max(300, Math.round(EXAM_SECONDS * n / 100));
+  }
+
+  function moduleAnswered(pid, mod) {
+    var p = BY_ID[pid], s = db.papers[pid];
+    if (!p || !s) return 0;
+    var n = 0;
+    moduleQuestions(p, mod).forEach(function (q) { if (s.answers[q.key]) n++; });
+    return n;
   }
 
   /* ---------------- utils ---------------- */
@@ -133,6 +178,7 @@
 
   /* ---------------- state ---------------- */
   var route = 'home';
+  var pick = { pid: null, mode: 'exam' };
   var sess = null;
   var lastResult = null;
   var revOnlyWrong = false;
@@ -141,42 +187,43 @@
   function cur() { return sess.qs[sess.idx]; }
 
   /* ---------------- session ---------------- */
-  function beginPaper(pid, mode, cfg) {
+  function beginSession(pid, mod, mode, cfg) {
     var p = BY_ID[pid];
-    var s = pstate(pid);
+    var st = pstate(pid);
+    var ms = modState(pid, mod);
     cfg = cfg || {};
-    if (cfg.fresh) {
-      var types = (cfg.types && cfg.types.length ? cfg.types.slice() : TYPES.slice());
-      var picked = p.questions.filter(function (q) { return types.indexOf(q.t) >= 0; });
-      if (cfg.random) shuffle(picked);
-      s.answers = {}; s.flags = {}; s.idx = 0; s.done = false; s.score = null; s.used = 0;
-      s.mode = mode;
-      s.types = types;
-      s.random = !!cfg.random;
-      s.order = picked.map(function (q) { return q.key; });
-      s.total = picked.length;
-      s.deadline = mode === 'exam' ? Date.now() + EXAM_SECONDS * 1000 : 0;
+    if (cfg.fresh || !ms.order) {
+      var qs = moduleQuestions(p, mod);
+      if (cfg.random) shuffle(qs);
+      ms.order = qs.map(function (q) { return q.key; });
+      ms.total = qs.length;
+      ms.idx = 0;
+      ms.done = false;
+      ms.score = null;
+      ms.used = 0;
+      ms.mode = mode;
+      ms.random = !!cfg.random;
+      ms.deadline = mode === 'exam' ? Date.now() + examLimit(qs.length) * 1000 : 0;
+      ms.at = Date.now();
     } else {
-      if (!s.order) {
-        s.order = p.questions.map(function (q) { return q.key; });
-        s.total = p.questions.length;
-      }
-      if (mode === 'exam' && !s.deadline) s.deadline = Date.now() + EXAM_SECONDS * 1000;
+      if (!ms.total) ms.total = ms.order.length;
+      if (mode === 'exam' && !ms.deadline) ms.deadline = Date.now() + examLimit(ms.total) * 1000;
+      if (mode !== 'exam') ms.deadline = 0;
+      ms.mode = mode;
     }
-    var list = s.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+    var list = ms.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
     if (!list.length) {
-      list = p.questions.slice();
-      s.order = list.map(function (q) { return q.key; });
-      s.total = list.length;
+      list = moduleQuestions(p, mod);
+      ms.order = list.map(function (q) { return q.key; });
+      ms.total = list.length;
     }
     sess = {
-      pid: pid,
-      title: p.title + (list.length === p.questions.length ? '' : '（' + list.length + ' 题）'),
-      mode: mode, qs: list, answers: s.answers, flags: s.flags,
-      idx: Math.min(s.idx || 0, list.length - 1),
-      st: s, persist: true, startAt: Date.now(), pending: {},
-      deadline: mode === 'exam' ? s.deadline : 0, limit: EXAM_SECONDS,
-      random: !!s.random, types: s.types || TYPES.slice(), done: false
+      pid: pid, mod: mod, title: p.title + ' · ' + modLabel(mod),
+      mode: mode, qs: list, answers: st.answers, flags: st.flags,
+      idx: Math.min(ms.idx || 0, list.length - 1),
+      st: st, ms: ms, persist: true, startAt: Date.now(), pending: {},
+      deadline: mode === 'exam' ? ms.deadline : 0, limit: examLimit(list.length),
+      random: !!ms.random, done: false
     };
     route = 'quiz';
     render();
@@ -185,12 +232,12 @@
   function beginSet(qs, title, mode, random) {
     if (random) shuffle(qs);
     sess = {
-      pid: null, title: title, mode: mode, qs: qs,
-      answers: {}, flags: {}, idx: 0, st: null, persist: false,
+      pid: null, mod: null, title: title, mode: mode, qs: qs,
+      answers: {}, flags: {}, idx: 0, st: null, ms: null, persist: false,
       startAt: Date.now(), pending: {},
       deadline: mode === 'exam' ? Date.now() + Math.max(600, qs.length * 54) * 1000 : 0,
       limit: Math.max(600, qs.length * 54), done: false,
-      random: !!random, types: null
+      random: !!random
     };
     route = 'quiz';
     render();
@@ -203,68 +250,20 @@
     if (randomize) shuffle(tail); else tail.sort(byPaperNo);
     sess.qs = head.concat(tail);
     sess.random = randomize;
-    if (sess.persist && sess.st) {
-      sess.st.order = sess.qs.map(function (q) { return q.key; });
-      sess.st.random = randomize;
+    if (sess.persist && sess.ms) {
+      sess.ms.order = sess.qs.map(function (q) { return q.key; });
+      sess.ms.random = randomize;
       save();
     }
     render();
     toast(randomize ? '已切换：后面的题随机出' : '已切换：后面的题按顺序出');
   }
 
-  function openStart(pid, mode) {
-    var p = BY_ID[pid];
-    var s = db.papers[pid] || null;
-    var last = db.settings.start || {};
-    var random = !!last.random;
-    var types = (last.types && last.types.length ? last.types.slice() : TYPES.slice());
-    var m = cloneTpl('tpl-start');
-    $('h3', m).textContent = p.title + ' · ' + (mode === 'exam' ? '考试模式' : '练习模式');
-    $('.start-sub', m).textContent = mode === 'exam'
-      ? '限时 90 分钟，交卷后出分并逐题显示答案。'
-      : '每答一题立即判对错，适合边练边记。';
-    var note = $('.start-note', m);
-    var warn = $('.start-warn', m);
-    if (s && !s.done && Object.keys(s.answers).length) {
-      warn.classList.remove('hidden');
-      warn.textContent = '这一卷还有未交卷的作答（' + Object.keys(s.answers).length + ' 题），开始新的会覆盖。想接着做请点首页的「继续」。';
-    }
-    function sync() {
-      $all('#segOrder button', m).forEach(function (b) {
-        b.classList.toggle('on', (b.getAttribute('data-order') === 'random') === random);
-      });
-      $all('#typeChecks input', m).forEach(function (i) { i.checked = types.indexOf(i.value) >= 0; });
-      var n = p.questions.filter(function (q) { return types.indexOf(q.t) >= 0; }).length;
-      note.textContent = '本次共 ' + n + ' 题 · 满分 ' + n + ' 分' + (random ? ' · 题序随机打乱' : ' · 按题号顺序');
-      $('[data-act="start-ok"]', m).disabled = n === 0;
-    }
-    $all('#segOrder button', m).forEach(function (b) {
-      b.addEventListener('click', function () { random = b.getAttribute('data-order') === 'random'; sync(); });
-    });
-    $all('#typeChecks input', m).forEach(function (i) {
-      i.addEventListener('change', function () {
-        types = TYPES.filter(function (t) { return $('[value="' + t + '"]', m).checked; });
-        sync();
-      });
-    });
-    sync();
-    var root = document.getElementById('modalRoot');
-    root.appendChild(m);
-    function close() { if (m.parentNode) m.parentNode.removeChild(m); }
-    m.addEventListener('click', function (e) {
-      if (e.target === m) { close(); return; }
-      var b = e.target.closest('[data-act]');
-      if (!b) return;
-      var act = b.getAttribute('data-act');
-      if (act === 'start-cancel') close();
-      if (act === 'start-ok') {
-        if (!types.length) return;
-        db.settings.start = { random: random, types: types.slice() };
-        save();
-        close();
-        beginPaper(pid, mode, { fresh: true, types: types.slice(), random: random });
-      }
-    });
+  function openPaper(pid, mode) {
+    pick.pid = pid;
+    pick.mode = mode || 'exam';
+    route = 'paper';
+    render();
   }
 
   function remainingSec() {
@@ -278,7 +277,7 @@
   }
 
   function persistPos() {
-    if (sess && sess.persist && sess.st) { sess.st.idx = sess.idx; save(); }
+    if (sess && sess.persist && sess.ms) { sess.ms.idx = sess.idx; sess.ms.at = Date.now(); save(); }
   }
 
   /* ---------------- scoring ---------------- */
@@ -327,6 +326,7 @@
     else if (route === 'wrong') node = viewList('wrong');
     else if (route === 'fav') node = viewList('fav');
     else if (route === 'history') node = viewHistory();
+    else if (route === 'paper') node = viewPaper();
     else node = viewKey();
 
     app.innerHTML = '';
@@ -357,27 +357,34 @@
 
     PAPERS.forEach(function (p) {
       var card = cloneTpl('tpl-paper-card');
-      var s = db.papers[p.id] || null;
+      var s = db.papers[p.id] ? pstate(p.id) : null;
       $('.p-title', card).textContent = p.title;
       var doneCount = s ? Object.keys(s.answers).length : 0;
       var best = null;
       db.history.forEach(function (h) {
-        if (h.pid === p.id && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
+        if (h.pid === p.id && (!h.mod || h.mod === 'all') && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
       });
       $('.p-score', card).textContent = best === null ? '—' : String(best);
       $('.p-done', card).textContent = String(doneCount);
 
       var resume = $('.p-resume', card);
-      if (s && !s.done && doneCount > 0) {
-        var total = s.total || (s.order ? s.order.length : 100);
-        resume.classList.remove('hidden');
-        resume.textContent = '继续：' + (s.mode === 'practice' ? '练习' : '考试') +
-          ' · ' + (s.random ? '随机' : '顺序') + ' · ' + doneCount + '/' + total;
-        resume.addEventListener('click', function () { beginPaper(p.id, s.mode || 'exam', {}); });
-        $('.btn-primary', card).textContent = '重新考试';
+      var recent = null, recentMod = null;
+      if (s && s.sessions) {
+        Object.keys(s.sessions).forEach(function (mod) {
+          var ms = s.sessions[mod];
+          if (!ms || ms.done || !ms.order) return;
+          if (!moduleAnswered(p.id, mod)) return;
+          if (!recent || (ms.at || 0) > (recent.at || 0)) { recent = ms; recentMod = mod; }
+        });
       }
-      $('.btn-primary', card).addEventListener('click', function () { openStart(p.id, 'exam'); });
-      $('[data-act="card-practice"]', card).addEventListener('click', function () { openStart(p.id, 'practice'); });
+      if (recent) {
+        resume.classList.remove('hidden');
+        resume.textContent = '继续：' + modLabel(recentMod) + ' · ' + (recent.mode === 'practice' ? '练习' : '考试') +
+          ' · ' + (recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, recentMod) + '/' + (recent.total || 0);
+        resume.addEventListener('click', function () { beginSession(p.id, recentMod, recent.mode || 'exam', {}); });
+      }
+      $('.btn-primary', card).addEventListener('click', function () { openPaper(p.id, 'exam'); });
+      $('[data-act="card-practice"]', card).addEventListener('click', function () { openPaper(p.id, 'practice'); });
       grid.appendChild(card);
     });
 
@@ -436,6 +443,56 @@
       return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
     }).sort(function (a, b) { return a.pid < b.pid ? -1 : (a.pid > b.pid ? 1 : a.n - b.n); });
     beginSet(picks, '随机模拟考（50 题）', 'exam');
+  }
+
+  /* ---------------- paper modules ---------------- */
+  function viewPaper() {
+    var node = cloneTpl('tpl-paper');
+    var p = BY_ID[pick.pid];
+    var st = pstate(p.id);
+    $('#paperTitle', node).textContent = p.title;
+    function paintMode() {
+      $all('#paperMode button', node).forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-mode') === pick.mode);
+      });
+    }
+    $all('#paperMode button', node).forEach(function (b) {
+      b.addEventListener('click', function () { pick.mode = b.getAttribute('data-mode'); paintMode(); });
+    });
+    paintMode();
+
+    var list = $('#modList', node);
+    [['single', '单选题'], ['multi', '多选题'], ['judge', '判断题'], ['all', '整套模拟']].forEach(function (m) {
+      var mod = m[0], name = m[1];
+      var qs = moduleQuestions(p, mod);
+      var ms = st.sessions[mod] || null;
+      var answered = moduleAnswered(p.id, mod);
+      var card = cloneTpl('tpl-mod-card');
+      $('.mod-name', card).textContent = name;
+      $('.mod-count', card).textContent = qs.length + ' 题';
+      $('.mod-bar i', card).style.width = (qs.length ? Math.round(answered / qs.length * 100) : 0) + '%';
+      var running = !!(ms && !ms.done && ms.order && answered > 0);
+      var meta = '已答 ' + answered + '/' + qs.length;
+      if (ms && ms.done && ms.score != null) meta += ' · 上次 ' + ms.score + '/' + (ms.total || qs.length);
+      else if (running) meta += ' · 进行中 · ' + (ms.random ? '随机' : '顺序');
+      $('.mod-meta', card).textContent = meta;
+
+      var primary = $('[data-act="mod-start"]', card);
+      primary.textContent = running ? '继续' : (ms && ms.done ? '再做一次' : '开始');
+      primary.addEventListener('click', function () {
+        if (running) beginSession(p.id, mod, ms.mode || pick.mode, {});
+        else beginSession(p.id, mod, pick.mode, { fresh: true, random: false });
+      });
+      var redo = $('[data-act="mod-redo"]', card);
+      redo.classList.toggle('hidden', !running);
+      redo.addEventListener('click', function () {
+        beginSession(p.id, mod, pick.mode, { fresh: true, random: false });
+      });
+      list.appendChild(card);
+    });
+
+    $('[data-act="paper-back"]', node).addEventListener('click', function () { route = 'home'; render(); });
+    return node;
   }
 
   /* ---------------- quiz view ---------------- */
@@ -634,11 +691,17 @@
     $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
     $('[data-act="exit"]', node).addEventListener('click', function () {
       var answered = Object.keys(sess.answers).length;
+      var pid = sess.pid, mode = sess.mode;
+      function leave() {
+        persistPos();
+        sess = null;
+        if (pid) { pick.pid = pid; pick.mode = mode; route = 'paper'; }
+        else route = 'home';
+        render();
+      }
       if (answered && !sess.done) {
-        showModal('暂时离开？', '作答进度会保存在本机，下次可点「继续上次作答」。', '离开', function () {
-          persistPos(); sess = null; route = 'home'; render();
-        }, '继续答题');
-      } else { sess = null; route = 'home'; render(); }
+        showModal('暂时离开？', '作答进度会保存，下次点「继续」接着做。', '离开', leave, '继续答题');
+      } else leave();
     });
 
     rebuildQuestion();
@@ -657,13 +720,13 @@
     var s = sess;
     var r = evaluate(s);
     var used = usedSec();
-    if (s.persist && s.st) {
-      s.st.done = true;
-      s.st.score = r.score;
-      s.st.total = r.total;
-      s.st.used = Math.round(used);
-      s.st.submittedAt = Date.now();
-      s.st.idx = s.idx;
+    if (s.persist && s.ms) {
+      s.ms.done = true;
+      s.ms.score = r.score;
+      s.ms.total = r.total;
+      s.ms.used = Math.round(used);
+      s.ms.idx = s.idx;
+      s.ms.at = Date.now();
     }
     s.qs.forEach(function (q) {
       var c = correctOf(q), a = s.answers[q.key] || '';
@@ -672,8 +735,8 @@
     });
     if (s.persist) {
       db.history.push({
-        pid: s.pid, mode: s.mode, score: r.score, total: r.total, at: Date.now(), used: Math.round(used),
-        types: s.types ? s.types.slice() : null, random: !!s.random
+        pid: s.pid, mod: s.mod || null, mode: s.mode, score: r.score, total: r.total,
+        at: Date.now(), used: Math.round(used), random: !!s.random
       });
       if (db.history.length > 200) db.history = db.history.slice(-200);
       save();
@@ -751,8 +814,12 @@
     toggle.addEventListener('click', function () { revOnlyWrong = !revOnlyWrong; paintReview(); });
 
     $('[data-act="retry"]', node).addEventListener('click', function () {
-      if (s.persist) beginPaper(s.pid, s.mode, { fresh: true, types: s.types, random: s.random });
+      if (s.persist && s.pid) beginSession(s.pid, s.mod, s.mode, { fresh: true, random: s.random });
       else beginSet(s.qs.map(function (q) { return q; }), s.title, s.mode, s.random);
+    });
+    $('[data-act="to-paper"]', node).addEventListener('click', function () {
+      if (s.pid) { pick.pid = s.pid; pick.mode = s.mode; route = 'paper'; render(); }
+      else { route = 'home'; render(); }
     });
     $('[data-act="to-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
     $('[data-act="home"]', node).addEventListener('click', function () { route = 'home'; render(); });
@@ -828,9 +895,8 @@
       var dateStr = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
         ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
       $('.his-title', row).textContent = (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
-        ' · ' + (h.mode === 'exam' ? '考试' : '练习');
+        ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习');
       var meta = dateStr + ' · 用时 ' + fmtUsed(h.used || 0);
-      if (h.types && h.types.length && h.types.length < TYPES.length) meta += ' · 仅' + h.types.map(typeLabel).join('、');
       if (h.random) meta += ' · 随机';
       $('.his-meta', row).textContent = meta;
       var b = $('.his-pct', row);

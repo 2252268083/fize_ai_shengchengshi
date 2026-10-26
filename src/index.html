@@ -81,33 +81,33 @@
   <div class="kpi"><span></span><b></b></div>
 </template>
 
-<!-- ============ 开始设置 ============ -->
-<template id="tpl-start">
-  <div class="modal-mask">
-    <div class="modal start-modal">
-      <h3></h3>
-      <p class="start-sub"></p>
-      <div class="opt-row">
-        <label>出题顺序</label>
-        <div class="seg" id="segOrder">
-          <button type="button" data-order="seq">顺序</button>
-          <button type="button" data-order="random">随机</button>
-        </div>
+<!-- ============ 题型模块 ============ -->
+<template id="tpl-paper">
+  <section class="view-enter">
+    <div class="paper-head">
+      <button class="btn btn-sm btn-ghost" data-act="paper-back">← 返回</button>
+      <div class="paper-title" id="paperTitle"></div>
+      <div class="seg" id="paperMode">
+        <button type="button" data-mode="exam">考试</button>
+        <button type="button" data-mode="practice">练习</button>
       </div>
-      <div class="opt-row">
-        <label>题型</label>
-        <div class="checks" id="typeChecks">
-          <label><input type="checkbox" value="single" checked> 单选题</label>
-          <label><input type="checkbox" value="multi" checked> 多选题</label>
-          <label><input type="checkbox" value="judge" checked> 判断题</label>
-        </div>
-      </div>
-      <p class="start-warn hidden"></p>
-      <p class="start-note"></p>
-      <div class="acts">
-        <button class="btn" data-act="start-cancel">取消</button>
-        <button class="btn btn-primary" data-act="start-ok">开始</button>
-      </div>
+    </div>
+    <p class="paper-tip">先选题型模块。进入答题后，点顶部「顺序 / 随机」就能随时切换——比如进「多选题」模块再点随机，只打乱多选题。</p>
+    <div class="mod-grid" id="modList"></div>
+  </section>
+</template>
+
+<template id="tpl-mod-card">
+  <div class="mod-card">
+    <div class="mod-top">
+      <span class="mod-name"></span>
+      <span class="mod-count"></span>
+    </div>
+    <div class="mod-bar"><i></i></div>
+    <div class="mod-meta"></div>
+    <div class="mod-ops">
+      <button class="btn btn-primary btn-sm" data-act="mod-start">开始</button>
+      <button class="btn btn-sm" data-act="mod-redo">重做</button>
     </div>
   </div>
 </template>
@@ -195,6 +195,7 @@
         <div class="sub" id="resSub"></div>
         <div class="result-actions">
           <button class="btn btn-primary" data-act="retry">重做本卷</button>
+          <button class="btn" data-act="to-paper">换个题型</button>
           <button class="btn" data-act="to-wrong">去错题本</button>
           <button class="btn" data-act="home">返回首页</button>
         </div>
