@@ -1,0 +1,1031 @@
+/* 人工智能训练师 · 理论自测练习 —— 纯前端，无需联网 */
+(function () {
+  'use strict';
+
+  var PAPERS = (window.QUIZ_DATA && window.QUIZ_DATA.papers) || [];
+  var KEY = window.ANSWER_KEY || {};
+  var META = window.ANSWER_META || {};
+  var EXAM_SECONDS = 90 * 60;
+  var LS = 'aitp.v1';
+
+  var ALL = [];
+  var BY_ID = {};
+  var QMAP = {};
+  var TYPES = ['single', 'multi', 'judge'];
+  PAPERS.forEach(function (p) {
+    BY_ID[p.id] = p;
+    p.questions.forEach(function (q) {
+      q.pid = p.id;
+      q.key = p.id + '#' + q.n;
+      ALL.push(q);
+      QMAP[q.key] = q;
+    });
+  });
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+  function byPaperNo(a, b) {
+    if (a.pid !== b.pid) return a.pid < b.pid ? -1 : 1;
+    return a.n - b.n;
+  }
+  function typeLabel(t) { return t === 'multi' ? '多选题' : (t === 'judge' ? '判断题' : '单选题'); }
+
+  /* ---------------- storage ---------------- */
+  function readDB() {
+    var d = null;
+    try { d = JSON.parse(window.localStorage.getItem(LS) || 'null'); } catch (e) { d = null; }
+    if (!d || typeof d !== 'object') d = {};
+    d.papers = d.papers || {};
+    d.wrong = d.wrong || {};
+    d.fav = d.fav || {};
+    d.overrides = d.overrides || {};
+    d.history = d.history || [];
+    d.settings = d.settings || {};
+    return d;
+  }
+  var db = readDB();
+  var memOnly = false;
+  function save() {
+    if (memOnly) return;
+    try { window.localStorage.setItem(LS, JSON.stringify(db)); }
+    catch (e) { memOnly = true; }
+  }
+  function pstate(pid) {
+    var s = db.papers[pid];
+    if (!s) {
+      s = { answers: {}, flags: {}, idx: 0, mode: '', done: false, score: null, used: 0, deadline: 0,
+            types: null, random: false, order: null, total: 0 };
+      db.papers[pid] = s;
+    }
+    return s;
+  }
+
+  /* ---------------- utils ---------------- */
+  var app = document.getElementById('app');
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function cloneTpl(id) {
+    return document.getElementById(id).content.firstElementChild.cloneNode(true);
+  }
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1900);
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return pad2(m) + ':' + pad2(s);
+  }
+  function fmtUsed(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m > 0 ? m + ' 分 ' + s + ' 秒' : s + ' 秒';
+  }
+  function letterAt(i) { return 'ABCDEFGH'.charAt(i); }
+  function sortedLetters(str) {
+    return (str || '').toUpperCase().split('').filter(function (c, i, a) { return 'ABCDEFGH'.indexOf(c) >= 0 && a.indexOf(c) === i; }).sort().join('');
+  }
+  function correctOf(q) {
+    var ov = db.overrides[q.pid];
+    if (ov && ov[q.n]) return sortedLetters(ov[q.n]);
+    var k = KEY[q.pid];
+    return k && k[q.n] ? sortedLetters(k[q.n]) : '';
+  }
+  function typeName(t) { return t === 'multi' ? '多选题' : (t === 'judge' ? '判断题' : '单选题'); }
+  function typeTagClass(t) { return t === 'multi' ? 'tag multi' : (t === 'judge' ? 'tag judge' : 'tag'); }
+
+  /* ---------------- modal ---------------- */
+  function showModal(title, text, okText, onOk, cancelText) {
+    var m = cloneTpl('tpl-modal');
+    $('.modal h3', m).textContent = title;
+    $('.modal p', m).textContent = text;
+    $('.modal .btn-primary', m).textContent = okText || '确定';
+    $('.modal .btn:not(.btn-primary)', m).textContent = cancelText || '取消';
+    var root = document.getElementById('modalRoot');
+    root.appendChild(m);
+    function close() { if (m.parentNode) m.parentNode.removeChild(m); }
+    m.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b) { if (e.target === m) close(); return; }
+      var act = b.getAttribute('data-act');
+      if (act === 'modal-ok') { close(); if (onOk) onOk(); }
+      else if (act === 'modal-cancel') { close(); }
+    });
+    return close;
+  }
+
+  /* ---------------- state ---------------- */
+  var route = 'home';
+  var sess = null;
+  var lastResult = null;
+  var revOnlyWrong = false;
+  var tickTimer = null;
+
+  function cur() { return sess.qs[sess.idx]; }
+
+  /* ---------------- session ---------------- */
+  function beginPaper(pid, mode, cfg) {
+    var p = BY_ID[pid];
+    var s = pstate(pid);
+    cfg = cfg || {};
+    if (cfg.fresh) {
+      var types = (cfg.types && cfg.types.length ? cfg.types.slice() : TYPES.slice());
+      var picked = p.questions.filter(function (q) { return types.indexOf(q.t) >= 0; });
+      if (cfg.random) shuffle(picked);
+      s.answers = {}; s.flags = {}; s.idx = 0; s.done = false; s.score = null; s.used = 0;
+      s.mode = mode;
+      s.types = types;
+      s.random = !!cfg.random;
+      s.order = picked.map(function (q) { return q.key; });
+      s.total = picked.length;
+      s.deadline = mode === 'exam' ? Date.now() + EXAM_SECONDS * 1000 : 0;
+    } else {
+      if (!s.order) {
+        s.order = p.questions.map(function (q) { return q.key; });
+        s.total = p.questions.length;
+      }
+      if (mode === 'exam' && !s.deadline) s.deadline = Date.now() + EXAM_SECONDS * 1000;
+    }
+    var list = s.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+    if (!list.length) {
+      list = p.questions.slice();
+      s.order = list.map(function (q) { return q.key; });
+      s.total = list.length;
+    }
+    sess = {
+      pid: pid,
+      title: p.title + (list.length === p.questions.length ? '' : '（' + list.length + ' 题）'),
+      mode: mode, qs: list, answers: s.answers, flags: s.flags,
+      idx: Math.min(s.idx || 0, list.length - 1),
+      st: s, persist: true, startAt: Date.now(), pending: {},
+      deadline: mode === 'exam' ? s.deadline : 0, limit: EXAM_SECONDS,
+      random: !!s.random, types: s.types || TYPES.slice(), done: false
+    };
+    route = 'quiz';
+    render();
+  }
+
+  function beginSet(qs, title, mode, random) {
+    if (random) shuffle(qs);
+    sess = {
+      pid: null, title: title, mode: mode, qs: qs,
+      answers: {}, flags: {}, idx: 0, st: null, persist: false,
+      startAt: Date.now(), pending: {},
+      deadline: mode === 'exam' ? Date.now() + Math.max(600, qs.length * 54) * 1000 : 0,
+      limit: Math.max(600, qs.length * 54), done: false,
+      random: !!random, types: null
+    };
+    route = 'quiz';
+    render();
+  }
+
+  function applyOrder(randomize) {
+    if (!sess) return;
+    var head = sess.qs.slice(0, sess.idx + 1);
+    var tail = sess.qs.slice(sess.idx + 1);
+    if (randomize) shuffle(tail); else tail.sort(byPaperNo);
+    sess.qs = head.concat(tail);
+    sess.random = randomize;
+    if (sess.persist && sess.st) {
+      sess.st.order = sess.qs.map(function (q) { return q.key; });
+      sess.st.random = randomize;
+      save();
+    }
+    render();
+    toast(randomize ? '已切换：后面的题随机出' : '已切换：后面的题按顺序出');
+  }
+
+  function openStart(pid, mode) {
+    var p = BY_ID[pid];
+    var s = db.papers[pid] || null;
+    var last = db.settings.start || {};
+    var random = !!last.random;
+    var types = (last.types && last.types.length ? last.types.slice() : TYPES.slice());
+    var m = cloneTpl('tpl-start');
+    $('h3', m).textContent = p.title + ' · ' + (mode === 'exam' ? '考试模式' : '练习模式');
+    $('.start-sub', m).textContent = mode === 'exam'
+      ? '限时 90 分钟，交卷后出分并逐题显示答案。'
+      : '每答一题立即判对错，适合边练边记。';
+    var note = $('.start-note', m);
+    var warn = $('.start-warn', m);
+    if (s && !s.done && Object.keys(s.answers).length) {
+      warn.classList.remove('hidden');
+      warn.textContent = '这一卷还有未交卷的作答（' + Object.keys(s.answers).length + ' 题），开始新的会覆盖。想接着做请点首页的「继续」。';
+    }
+    function sync() {
+      $all('#segOrder button', m).forEach(function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-order') === 'random') === random);
+      });
+      $all('#typeChecks input', m).forEach(function (i) { i.checked = types.indexOf(i.value) >= 0; });
+      var n = p.questions.filter(function (q) { return types.indexOf(q.t) >= 0; }).length;
+      note.textContent = '本次共 ' + n + ' 题 · 满分 ' + n + ' 分' + (random ? ' · 题序随机打乱' : ' · 按题号顺序');
+      $('[data-act="start-ok"]', m).disabled = n === 0;
+    }
+    $all('#segOrder button', m).forEach(function (b) {
+      b.addEventListener('click', function () { random = b.getAttribute('data-order') === 'random'; sync(); });
+    });
+    $all('#typeChecks input', m).forEach(function (i) {
+      i.addEventListener('change', function () {
+        types = TYPES.filter(function (t) { return $('[value="' + t + '"]', m).checked; });
+        sync();
+      });
+    });
+    sync();
+    var root = document.getElementById('modalRoot');
+    root.appendChild(m);
+    function close() { if (m.parentNode) m.parentNode.removeChild(m); }
+    m.addEventListener('click', function (e) {
+      if (e.target === m) { close(); return; }
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      var act = b.getAttribute('data-act');
+      if (act === 'start-cancel') close();
+      if (act === 'start-ok') {
+        if (!types.length) return;
+        db.settings.start = { random: random, types: types.slice() };
+        save();
+        close();
+        beginPaper(pid, mode, { fresh: true, types: types.slice(), random: random });
+      }
+    });
+  }
+
+  function remainingSec() {
+    if (!sess || !sess.deadline) return 0;
+    return Math.max(0, Math.ceil((sess.deadline - Date.now()) / 1000));
+  }
+  function usedSec() {
+    if (!sess) return 0;
+    if (sess.mode === 'exam' && sess.deadline) return Math.min(sess.limit || EXAM_SECONDS, (sess.limit || EXAM_SECONDS) - remainingSec());
+    return (Date.now() - sess.startAt) / 1000;
+  }
+
+  function persistPos() {
+    if (sess && sess.persist && sess.st) { sess.st.idx = sess.idx; save(); }
+  }
+
+  /* ---------------- scoring ---------------- */
+  function evaluate(s) {
+    var stat = { single: [0, 0], multi: [0, 0], judge: [0, 0] };
+    var score = 0, unknown = 0, blank = 0, wrong = [];
+    s.qs.forEach(function (q) {
+      var c = correctOf(q), a = s.answers[q.key] || '';
+      stat[q.t][1]++;
+      if (!c) { unknown++; return; }
+      if (a === c) { score++; stat[q.t][0]++; }
+      else { if (!a) blank++; else wrong.push(q); }
+    });
+    return { score: score, stat: stat, unknown: unknown, blank: blank, wrong: wrong, total: s.qs.length };
+  }
+
+  function addWrong(q) {
+    if (!db.wrong[q.key]) { db.wrong[q.key] = { pid: q.pid, n: q.n, at: Date.now() }; save(); }
+  }
+  function removeWrong(q) {
+    if (db.wrong[q.key]) { delete db.wrong[q.key]; save(); }
+  }
+
+  /* ---------------- timer ---------------- */
+  function tick() {
+    if (route !== 'quiz' || !sess) return;
+    var t = document.getElementById('timerText');
+    if (!t) return;
+    var exam = sess.mode === 'exam';
+    var sec = exam ? remainingSec() : (Date.now() - sess.startAt) / 1000;
+    t.textContent = fmtClock(sec);
+    var box = document.getElementById('timer');
+    if (box) box.classList.toggle('warn', exam && sec <= 300);
+    if (exam && sess.deadline && sec <= 0 && !sess.done) {
+      sess.done = true;
+      evaluateAndFinish(true);
+    }
+  }
+
+  /* ---------------- render root ---------------- */
+  function render() {
+    var node;
+    if (route === 'home') node = viewHome();
+    else if (route === 'quiz') node = viewQuiz();
+    else if (route === 'result') node = viewResult();
+    else if (route === 'wrong') node = viewList('wrong');
+    else if (route === 'fav') node = viewList('fav');
+    else if (route === 'history') node = viewHistory();
+    else node = viewKey();
+
+    app.innerHTML = '';
+    app.appendChild(node);
+    window.scrollTo(0, 0);
+    paintNav();
+    clearInterval(tickTimer);
+    if (route === 'quiz') {
+      tickTimer = setInterval(tick, 1000);
+      tick();
+    }
+  }
+
+  function paintNav() {
+    $all('.top-link').forEach(function (b) {
+      var nav = b.getAttribute('data-nav');
+      b.classList.toggle('active', nav === route || (route === 'result' && nav === 'home'));
+    });
+    var wc = Object.keys(db.wrong).length;
+    document.getElementById('navWrong').textContent = wc ? '(' + wc + ')' : '';
+  }
+
+  /* ---------------- home ---------------- */
+  function viewHome() {
+    var node = cloneTpl('tpl-home');
+    var grid = $('#paperGrid', node);
+    var mini = $('#miniGrid', node);
+
+    PAPERS.forEach(function (p) {
+      var card = cloneTpl('tpl-paper-card');
+      var s = db.papers[p.id] || null;
+      $('.p-title', card).textContent = p.title;
+      var doneCount = s ? Object.keys(s.answers).length : 0;
+      var best = null;
+      db.history.forEach(function (h) {
+        if (h.pid === p.id && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
+      });
+      $('.p-score', card).textContent = best === null ? '—' : String(best);
+      $('.p-done', card).textContent = String(doneCount);
+
+      var resume = $('.p-resume', card);
+      if (s && !s.done && doneCount > 0) {
+        var total = s.total || (s.order ? s.order.length : 100);
+        resume.classList.remove('hidden');
+        resume.textContent = '继续：' + (s.mode === 'practice' ? '练习' : '考试') +
+          ' · ' + (s.random ? '随机' : '顺序') + ' · ' + doneCount + '/' + total;
+        resume.addEventListener('click', function () { beginPaper(p.id, s.mode || 'exam', {}); });
+        $('.btn-primary', card).textContent = '重新考试';
+      }
+      $('.btn-primary', card).addEventListener('click', function () { openStart(p.id, 'exam'); });
+      $('[data-act="card-practice"]', card).addEventListener('click', function () { openStart(p.id, 'practice'); });
+      grid.appendChild(card);
+    });
+
+    function miniCard(icon, cls, title, sub, fn) {
+      var c = el('div', 'mini-card');
+      c.appendChild(el('div', 'ico ' + cls, icon));
+      var box = el('div');
+      box.appendChild(el('h4', null, title));
+      box.appendChild(el('p', null, sub));
+      c.appendChild(box);
+      c.addEventListener('click', fn);
+      return c;
+    }
+    mini.appendChild(miniCard('🎲', '', '随机模拟考', '三套卷随机抽 50 题 · 45 分钟', function () {
+      startRandomExam();
+    }));
+    mini.appendChild(miniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
+      route = 'wrong'; render();
+    }));
+    mini.appendChild(miniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
+      route = 'fav'; render();
+    }));
+    mini.appendChild(miniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
+      route = 'history'; render();
+    }));
+
+    var kpis = $('#homeKpis', node);
+    var answered = 0;
+    PAPERS.forEach(function (p) { var s = db.papers[p.id]; if (s) answered += Object.keys(s.answers).length; });
+    var avg = null;
+    if (db.history.length) {
+      var sum = 0, cnt = 0;
+      db.history.forEach(function (h) { sum += h.score / (h.total || 100) * 100; cnt++; });
+      avg = Math.round(sum / cnt);
+    }
+    [['题库总量', ALL.length + ' 题'], ['累计作答', answered + ' 题'], ['历史平均分', avg === null ? '—' : avg], ['错题数量', Object.keys(db.wrong).length + ' 题']].forEach(function (x) {
+      var k = cloneTpl('tpl-kpi');
+      $('span', k).textContent = x[0];
+      $('b', k).textContent = x[1];
+      kpis.appendChild(k);
+    });
+
+    $('[data-act="random-exam"]', node).addEventListener('click', function () { startRandomExam(); });
+    $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
+    $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
+    return node;
+  }
+
+  function startRandomExam() {
+    var pool = ALL.slice();
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    var picks = pool.slice(0, 50).map(function (q) {
+      return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
+    }).sort(function (a, b) { return a.pid < b.pid ? -1 : (a.pid > b.pid ? 1 : a.n - b.n); });
+    beginSet(picks, '随机模拟考（50 题）', 'exam');
+  }
+
+  /* ---------------- quiz view ---------------- */
+  function viewQuiz() {
+    var node = cloneTpl('tpl-quiz');
+    $('#qTitle', node).textContent = sess.title;
+    $('#qModeTag', node).textContent = sess.mode === 'exam' ? '考试模式' : '练习模式';
+    var btnOrder = $('#btnOrder', node);
+    if (btnOrder) {
+      btnOrder.textContent = sess.random ? '随机' : '顺序';
+      btnOrder.classList.toggle('on', !!sess.random);
+      btnOrder.title = sess.random ? '当前随机出题，点击改为顺序' : '当前按题号顺序，点击改为随机';
+      btnOrder.addEventListener('click', function () { applyOrder(!sess.random); });
+    }
+
+    var opts = $('#qOpts', node);
+    var cells = $('#cards', node);
+
+    function rebuildQuestion() {
+      var q = cur();
+      opts.innerHTML = '';
+      q.o.forEach(function (txt, i) {
+        var o = cloneTpl('tpl-option');
+        o.setAttribute('data-letter', letterAt(i));
+        $('.letter', o).textContent = letterAt(i);
+        $('.txt', o).textContent = txt;
+        o.addEventListener('click', function () { choose(i); });
+        opts.appendChild(o);
+      });
+      $('#qNo', node).textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
+      $('#qType', node).textContent = typeName(q.t);
+      $('#qType', node).className = typeTagClass(q.t);
+      $('#qHint', node).textContent = q.t === 'multi' ? '（多选，全对才得分）' : '';
+      $('#qStem', node).textContent = q.q;
+      var fav = $('[data-act="fav"]', node);
+      fav.textContent = db.fav[q.key] ? '★' : '☆';
+      fav.classList.toggle('on', !!db.fav[q.key]);
+      paintOptions();
+      paintCard();
+      paintFeedback();
+      tick();
+    }
+
+    // build answer card once
+    sess.qs.forEach(function (q, i) {
+      var c = cloneTpl('tpl-cell');
+      c.textContent = String(q.n);
+      c.setAttribute('data-idx', String(i));
+      c.addEventListener('click', function () {
+        sess.idx = i; persistPos();
+        rebuildQuestion();
+        var side = $('#sideCard', node);
+        if (side) side.classList.remove('open');
+      });
+      cells.appendChild(c);
+    });
+
+    function pendingOf(q) {
+      if (!sess.pending) sess.pending = {};
+      if (sess.pending[q.key] == null) sess.pending[q.key] = sortedLetters(sess.answers[q.key] || '');
+      return sess.pending[q.key];
+    }
+
+    function choose(i) {
+      var q = cur();
+      var L = letterAt(i);
+      if (q.t === 'multi') {
+        var next = pendingOf(q);
+        next = next.indexOf(L) >= 0 ? next.replace(L, '') : sortedLetters(next + L);
+        if (sess.mode === 'practice' && sess.answers[q.key]) { toast('本题已作答，可「清空本题」后重选'); return; }
+        sess.pending[q.key] = next;
+        if (sess.mode === 'exam') {
+          setAnswer(q, next);
+        }
+        paintOptions();
+        paintCard();
+        return;
+      }
+      if (sess.mode === 'practice' && sess.answers[q.key]) { toast('本题已作答，可「清空本题」后重选'); return; }
+      setAnswer(q, L);
+      if (sess.mode === 'practice') {
+        var c = correctOf(q);
+        if (c && L === c) { removeWrong(q); } else if (c) { addWrong(q); }
+      }
+      paintOptions();
+      paintCard();
+      paintFeedback();
+    }
+
+    function setAnswer(q, v) {
+      if (v) sess.answers[q.key] = sortedLetters(v);
+      else delete sess.answers[q.key];
+      if (sess.persist) save();
+    }
+
+    function paintOptions() {
+      var q = cur();
+      var a = sess.answers[q.key] || '';
+      var c = correctOf(q);
+      var showKey = sess.mode === 'practice' && !!a;
+      var pending = (sess.mode === 'practice' && q.t === 'multi') ? pendingOf(q) : a;
+      $all('.opt', opts).forEach(function (o) {
+        var L = o.getAttribute('data-letter');
+        var sel = (sess.mode === 'practice' && q.t === 'multi' && !a ? pending : a).indexOf(L) >= 0;
+        o.classList.toggle('sel', sel);
+        o.classList.toggle('correct', showKey && c.indexOf(L) >= 0);
+        o.classList.toggle('wrong', showKey && sel && c.indexOf(L) < 0);
+        var mk = $('.mark', o);
+        if (showKey && c.indexOf(L) >= 0) mk.textContent = '正确答案';
+        else if (showKey && sel) mk.textContent = '你的选择';
+        else mk.textContent = '';
+      });
+      var b = $('[data-act="confirm-multi"]', node);
+      var needConfirm = sess.mode === 'practice' && q.t === 'multi' && !sess.answers[q.key];
+      b.classList.toggle('hidden', !needConfirm);
+    }
+
+    function paintFeedback() {
+      var box = $('#qFeedback', node);
+      var q = cur();
+      var a = sess.answers[q.key] || '';
+      if (sess.mode !== 'practice' || !a) { box.classList.add('hidden'); return; }
+      var c = correctOf(q);
+      box.classList.remove('hidden');
+      box.className = 'feedback';
+      if (!c) {
+        box.classList.add('unknown');
+        box.textContent = '本题尚未收录参考答案，可在「答案管理」中补充。';
+      } else if (a === c) {
+        box.textContent = '✓ 回答正确';
+      } else {
+        box.classList.add('bad');
+        var txt = '✗ 回答错误，正确答案：' + c.split('').join(' ');
+        box.textContent = txt;
+      }
+    }
+
+    function paintCard() {
+      var cellsArr = $all('.cell', cells);
+      var done = 0, flag = 0;
+      sess.qs.forEach(function (q, i) {
+        var cell = cellsArr[i];
+        var d = !!sess.answers[q.key];
+        if (d) done++;
+        if (sess.flags[q.key]) flag++;
+        cell.classList.toggle('done', d);
+        cell.classList.toggle('flag', !!sess.flags[q.key]);
+        cell.classList.toggle('cur', i === sess.idx);
+      });
+      $('#infoDone', node).textContent = String(done);
+      $('#infoFlag', node).textContent = String(flag);
+      $('#infoLeft', node).textContent = String(sess.qs.length - done);
+      $('#cardProgress', node).textContent = done + '/' + sess.qs.length;
+    }
+
+    // footer buttons
+    $('[data-act="prev"]', node).addEventListener('click', function () {
+      if (sess.idx > 0) { sess.idx--; persistPos(); rebuildQuestion(); }
+    });
+    $('[data-act="next"]', node).addEventListener('click', function () {
+      if (sess.idx < sess.qs.length - 1) { sess.idx++; persistPos(); rebuildQuestion(); }
+      else toast('已经是最后一题了');
+    });
+    $('[data-act="mark"]', node).addEventListener('click', function () {
+      var q = cur();
+      sess.flags[q.key] = !sess.flags[q.key];
+      if (sess.persist) save();
+      paintCard();
+      toast(sess.flags[q.key] ? '已标记，稍后可在答题卡查看' : '已取消标记');
+    });
+    $('[data-act="clear"]', node).addEventListener('click', function () {
+      var q = cur();
+      delete sess.answers[q.key];
+      if (sess.pending) delete sess.pending[q.key];
+      if (sess.persist) save();
+      paintOptions(); paintCard(); paintFeedback();
+    });
+    $('[data-act="fav"]', node).addEventListener('click', function () {
+      var q = cur();
+      if (db.fav[q.key]) delete db.fav[q.key];
+      else db.fav[q.key] = { pid: q.pid, n: q.n, at: Date.now() };
+      save(); rebuildQuestion();
+    });
+    $('[data-act="confirm-multi"]', node).addEventListener('click', function () {
+      var q = cur();
+      var v = pendingOf(q);
+      if (!v) { toast('请先选择至少一个选项'); return; }
+      setAnswer(q, v);
+      var c = correctOf(q);
+      if (c && v === c) removeWrong(q); else if (c) addWrong(q);
+      paintOptions(); paintCard(); paintFeedback();
+    });
+    $('[data-act="toggle-card"]', node).addEventListener('click', function () {
+      $('#sideCard', node).classList.toggle('open');
+    });
+    $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
+    $('[data-act="exit"]', node).addEventListener('click', function () {
+      var answered = Object.keys(sess.answers).length;
+      if (answered && !sess.done) {
+        showModal('暂时离开？', '作答进度会保存在本机，下次可点「继续上次作答」。', '离开', function () {
+          persistPos(); sess = null; route = 'home'; render();
+        }, '继续答题');
+      } else { sess = null; route = 'home'; render(); }
+    });
+
+    rebuildQuestion();
+    return node;
+  }
+
+  function confirmSubmit() {
+    var unanswered = sess.qs.filter(function (q) { return !sess.answers[q.key]; }).length;
+    var msg = '共 ' + sess.qs.length + ' 题，已答 ' + (sess.qs.length - unanswered) + ' 题';
+    if (unanswered) msg += '，还有 ' + unanswered + ' 题未作答（按错处理）';
+    msg += '。交卷后即可查看答案与解析。';
+    showModal('确认交卷？', msg, '交卷', function () { evaluateAndFinish(false); });
+  }
+
+  function evaluateAndFinish(auto) {
+    var s = sess;
+    var r = evaluate(s);
+    var used = usedSec();
+    if (s.persist && s.st) {
+      s.st.done = true;
+      s.st.score = r.score;
+      s.st.total = r.total;
+      s.st.used = Math.round(used);
+      s.st.submittedAt = Date.now();
+      s.st.idx = s.idx;
+    }
+    s.qs.forEach(function (q) {
+      var c = correctOf(q), a = s.answers[q.key] || '';
+      if (!c || !a) return;
+      if (a === c) removeWrong(q); else addWrong(q);
+    });
+    if (s.persist) {
+      db.history.push({
+        pid: s.pid, mode: s.mode, score: r.score, total: r.total, at: Date.now(), used: Math.round(used),
+        types: s.types ? s.types.slice() : null, random: !!s.random
+      });
+      if (db.history.length > 200) db.history = db.history.slice(-200);
+      save();
+    }
+    lastResult = { sess: s, r: r, used: used };
+    revOnlyWrong = false;
+    route = 'result';
+    render();
+    if (auto) toast('时间到，已自动交卷');
+  }
+
+  /* ---------------- result ---------------- */
+  function viewResult() {
+    var node = cloneTpl('tpl-result');
+    var s = lastResult.sess, r = lastResult.r;
+    var pct = r.total ? r.score / r.total : 0;
+
+    $('#scoreVal', node).textContent = String(r.score);
+    $('#scoreOf', node).textContent = '得分 / ' + r.total;
+    $('#resTitle', node).textContent = s.mode === 'exam' ? '交卷完成' : '练习完成';
+    var praise = pct >= 0.9 ? '状态非常好，保持手感。' : pct >= 0.75 ? '基础扎实，重点补错题。' : pct >= 0.6 ? '还有提升空间，建议按章节重刷。' : '建议先过一遍错题，再重做本卷。';
+    $('#resSub', node).textContent = s.title + ' · 用时 ' + fmtUsed(lastResult.used) + ' · 正确率 ' + Math.round(pct * 100) + '%　' + praise;
+
+    var ring = $('#ring', node);
+    var C = 2 * Math.PI * 64;
+    ring.setAttribute('stroke-dasharray', String(C));
+    ring.setAttribute('stroke-dashoffset', String(C));
+    var color = pct >= 0.8 ? '#16a34a' : pct >= 0.6 ? '#3b5bdb' : '#dc2626';
+    ring.setAttribute('stroke', color);
+    setTimeout(function () {
+      ring.style.transition = 'stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)';
+      ring.setAttribute('stroke-dashoffset', String(C * (1 - pct)));
+    }, 60);
+
+    var kpis = $('#resKpis', node);
+    [['用时', fmtUsed(lastResult.used)],
+     ['单选题', r.stat.single[0] + ' / ' + r.stat.single[1]],
+     ['多选题', r.stat.multi[0] + ' / ' + r.stat.multi[1]],
+     ['判断题', r.stat.judge[0] + ' / ' + r.stat.judge[1]]].forEach(function (x) {
+      var k = cloneTpl('tpl-kpi');
+      $('span', k).textContent = x[0];
+      $('b', k).textContent = x[1];
+      kpis.appendChild(k);
+    });
+
+    var revBox = $('#review', node);
+    var toggle = $('#revToggle', node);
+    function paintReview() {
+      revBox.innerHTML = '';
+      var list = s.qs.filter(function (q) {
+        if (!revOnlyWrong) return true;
+        var c = correctOf(q), a = s.answers[q.key] || '';
+        return !c || a !== c;
+      });
+      if (!list.length) { revBox.appendChild(el('div', 'empty', '没有需要回顾的题目 🎉')); return; }
+      list.forEach(function (q) {
+        var item = cloneTpl('tpl-review');
+        var c = correctOf(q), a = s.answers[q.key] || '';
+        var ok = c && a === c;
+        item.classList.toggle('bad', !ok);
+        $('.no', item).textContent = q.pid + ' 卷 第 ' + q.n + ' 题';
+        var tag = $('.tag', item);
+        tag.textContent = typeName(q.t);
+        tag.className = typeTagClass(q.t);
+        var badge = el('span', 'ans-badge ' + (ok ? 'ok' : (c ? 'bad' : 'mid')), ok ? '答对' : (c ? (a ? '答错' : '未作答') : '未收录答案'));
+        $('.badge-wrap', item).appendChild(badge);
+        $('.rs', item).textContent = q.q;
+        $('.ro-my span', item).textContent = a ? a.split('').join(' ') : '未作答';
+        $('.ro-ck span', item).textContent = c ? c.split('').join(' ') : '—';
+        revBox.appendChild(item);
+      });
+      toggle.textContent = revOnlyWrong ? '显示全部' : '只看错题';
+    }
+    paintReview();
+    toggle.addEventListener('click', function () { revOnlyWrong = !revOnlyWrong; paintReview(); });
+
+    $('[data-act="retry"]', node).addEventListener('click', function () {
+      if (s.persist) beginPaper(s.pid, s.mode, { fresh: true, types: s.types, random: s.random });
+      else beginSet(s.qs.map(function (q) { return q; }), s.title, s.mode, s.random);
+    });
+    $('[data-act="to-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
+    $('[data-act="home"]', node).addEventListener('click', function () { route = 'home'; render(); });
+    return node;
+  }
+
+  /* ---------------- lists ---------------- */
+  function viewList(kind) {
+    var node = cloneTpl('tpl-list');
+    var map = kind === 'wrong' ? db.wrong : db.fav;
+    var keys = Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); });
+    var title = kind === 'wrong' ? '错题本' : '我的收藏';
+    $('#listTitle', node).textContent = title;
+    $('#listDesc', node).textContent = kind === 'wrong'
+      ? '共 ' + keys.length + ' 道。答对后会自动移出；也可手动移除。'
+      : '共 ' + keys.length + ' 道。收藏的题目可以随时回看。';
+
+    var body = $('#listBody', node);
+    var qs = keys.map(function (k) {
+      var q = ALL.filter(function (x) { return x.key === k; })[0];
+      return q;
+    }).filter(Boolean);
+
+    if (!qs.length) {
+      body.appendChild(el('div', 'empty', kind === 'wrong' ? '还没有错题，去刷一套卷子吧 📚' : '还没有收藏，点题目右上角 ☆ 收藏'));
+    }
+
+    qs.forEach(function (q) {
+      var row = cloneTpl('tpl-row');
+      var tag = $('.tag', row);
+      tag.textContent = typeName(q.t);
+      tag.className = typeTagClass(q.t);
+      $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+      var c = correctOf(q);
+      $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+      $('[data-act="row-go"]', row).addEventListener('click', function () {
+        beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+      });
+      $('[data-act="row-del"]', row).addEventListener('click', function () {
+        delete map[q.key]; save(); render();
+      });
+      body.appendChild(row);
+    });
+
+    $('[data-act="list-practice"]', node).addEventListener('click', function () {
+      if (!qs.length) { toast('列表是空的'); return; }
+      beginSet(qs, title + ' · 重练', 'practice');
+    });
+    $('[data-act="list-clear"]', node).addEventListener('click', function () {
+      if (!qs.length) return;
+      showModal('清空' + title + '？', '该操作不可撤销。', '清空', function () {
+        qs.forEach(function (q) { delete map[q.key]; });
+        save(); render();
+      });
+    });
+    return node;
+  }
+
+  /* ---------------- history ---------------- */
+  function viewHistory() {
+    var node = cloneTpl('tpl-history');
+    var list = $('#hisList', node);
+    var items = db.history.slice().reverse();
+    $('#hisDesc', node).textContent = '共 ' + items.length + ' 条记录，保存在本机浏览器；换浏览器或清缓存会丢，可先导出备份。';
+    if (!items.length) list.appendChild(el('div', 'empty', '还没有记录，做一套卷子就会自动保存 🎯'));
+    items.forEach(function (h) {
+      var total = h.total || 100;
+      var pct = total ? Math.round(h.score / total * 100) : 0;
+      var row = cloneTpl('tpl-his-row');
+      $('.his-score b', row).textContent = h.score + '/' + total;
+      $('.his-score span', row).textContent = '得分';
+      var d = new Date(h.at);
+      var dateStr = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+      $('.his-title', row).textContent = (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
+        ' · ' + (h.mode === 'exam' ? '考试' : '练习');
+      var meta = dateStr + ' · 用时 ' + fmtUsed(h.used || 0);
+      if (h.types && h.types.length && h.types.length < TYPES.length) meta += ' · 仅' + h.types.map(typeLabel).join('、');
+      if (h.random) meta += ' · 随机';
+      $('.his-meta', row).textContent = meta;
+      var b = $('.his-pct', row);
+      b.textContent = pct + '%';
+      b.className = 'ans-badge ' + (pct >= 80 ? 'ok' : pct >= 60 ? 'mid' : 'bad') + ' his-pct';
+      list.appendChild(row);
+    });
+    $('[data-act="his-clear"]', node).addEventListener('click', function () {
+      if (!db.history.length) { toast('还没有记录'); return; }
+      showModal('清空学习记录？', '只清除这份记录列表，不影响各卷作答进度、错题本和收藏。', '清空', function () {
+        db.history = []; save(); render(); toast('记录已清空');
+      });
+    });
+    $('[data-act="his-export"]', node).addEventListener('click', function () {
+      if (!db.history.length) { toast('还没有记录'); return; }
+      var blob = new Blob([JSON.stringify(db.history, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '学习记录.json';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    });
+    return node;
+  }
+
+  /* ---------------- key management ---------------- */
+  function keyText(pid) {
+    var p = BY_ID[pid];
+    var lines = p.questions.map(function (q) {
+      var c = correctOf(q);
+      return q.n + ' ' + (c || '?');
+    });
+    return lines.join('\n');
+  }
+
+  function viewKey() {
+    var node = cloneTpl('tpl-key');
+    var sel = $('#keyPaper', node);
+    var ta = $('#keyText', node);
+
+    function refresh() {
+      var pid = sel.value;
+      ta.value = keyText(pid);
+      var ov = db.overrides[pid] || {};
+      var n = Object.keys(ov).length;
+      $('#keyStat', node).textContent = n ? ('本卷已修改 ' + n + ' 题') : '本卷使用默认答案';
+    }
+    sel.addEventListener('change', refresh);
+
+    $('[data-act="key-load"]', node).addEventListener('click', refresh);
+    $('[data-act="key-reset"]', node).addEventListener('click', function () {
+      var pid = sel.value;
+      showModal('恢复默认答案？', '将清除你在 ' + pid + ' 卷手动修改的答案。', '恢复', function () {
+        delete db.overrides[pid]; save(); refresh(); toast('已恢复默认答案');
+      });
+    });
+    $('[data-act="key-apply"]', node).addEventListener('click', function () {
+      var pid = sel.value;
+      var raw = ta.value.replace(/[，、；;]/g, '\n');
+      var count = 0, bad = 0;
+      raw.split(/\r?\n/).forEach(function (line) {
+        var t = line.trim();
+        if (!t) return;
+        var m = t.match(/^(\d{1,3})\s*[\.:：\-]?\s*([A-Ha-h]+)$/) || t.match(/^(\d{1,3})\s+([A-Ha-h\s]+)$/);
+        if (!m) { bad++; return; }
+        var no = parseInt(m[1], 10);
+        var ans = sortedLetters(m[2].replace(/\s/g, ''));
+        var p = BY_ID[pid];
+        if (!p || !p.questions.some(function (q) { return q.n === no; })) { bad++; return; }
+        if (!ans) { bad++; return; }
+        db.overrides[pid] = db.overrides[pid] || {};
+        db.overrides[pid][no] = ans;
+        count++;
+      });
+      save();
+      $('#keyStat', node).textContent = '本卷已修改 ' + Object.keys(db.overrides[pid] || {}).length + ' 题';
+      toast('已更新 ' + count + ' 题' + (bad ? '，' + bad + ' 行无法识别' : ''));
+      if (lastResult && route === 'result') render();
+    });
+    $('[data-act="key-export"]', node).addEventListener('click', function () {
+      var out = {};
+      PAPERS.forEach(function (p) {
+        out[p.id] = {};
+        p.questions.forEach(function (q) { out[p.id][q.n] = correctOf(q); });
+      });
+      var blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '答案导出.json';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    });
+    $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
+      showModal('重置全部进度？', '将清空三套卷的作答记录、错题本、收藏与历史成绩（答案修改也会清除）。', '全部清空', function () {
+        db.papers = {}; db.wrong = {}; db.fav = {}; db.history = []; db.overrides = {};
+        save(); lastResult = null; refresh(); toast('已重置');
+      });
+    });
+    $('[data-act="key-import"]', node).addEventListener('click', function () {
+      var inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.json,application/json';
+      inp.addEventListener('change', function () {
+        var f = inp.files && inp.files[0];
+        if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () {
+          try {
+            var data = JSON.parse(String(rd.result));
+            var n = 0;
+            Object.keys(data).forEach(function (pid) {
+              if (!BY_ID[pid]) return;
+              db.overrides[pid] = db.overrides[pid] || {};
+              Object.keys(data[pid]).forEach(function (no) {
+                var ans = sortedLetters(String(data[pid][no]));
+                if (ans) { db.overrides[pid][no] = ans; n++; }
+              });
+            });
+            save(); refresh(); toast('已导入 ' + n + ' 条答案');
+          } catch (e) { toast('文件解析失败，请检查 JSON 格式'); }
+        };
+        rd.readAsText(f, 'utf-8');
+      });
+      inp.click();
+    });
+
+    refresh();
+    return node;
+  }
+
+  /* ---------------- keyboard ---------------- */
+  document.addEventListener('keydown', function (e) {
+    if (route !== 'quiz' || !sess) return;
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    var k = String(e.key || '').toUpperCase();
+    if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
+      var q = cur();
+      var i = 'ABCDEFGH'.indexOf(k);
+      if (i < q.o.length) {
+        e.preventDefault();
+        var btns = $all('#qOpts .opt');
+        if (btns[i]) btns[i].click();
+      }
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      var nb = $('[data-act="next"]');
+      if (nb) nb.click();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      var pb = $('[data-act="prev"]');
+      if (pb) pb.click();
+    } else if (e.key === 'Enter') {
+      if ($('.modal-mask')) return;
+      e.preventDefault();
+      confirmSubmit();
+    }
+  });
+
+  /* ---------------- top nav ---------------- */
+  $all('.top-link').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var nav = b.getAttribute('data-nav');
+      if (nav === 'home') {
+        if (route === 'quiz' && sess && Object.keys(sess.answers).length && !sess.done) {
+          showModal('回到首页？', '本次作答进度会保存，稍后可继续。', '回到首页', function () {
+            persistPos(); sess = null; route = 'home'; render();
+          }, '继续答题');
+          return;
+        }
+        sess = null;
+        route = 'home';
+      } else if (nav === 'wrong') { route = 'wrong'; }
+      else if (nav === 'key') { route = 'key'; }
+      render();
+    });
+  });
+
+  document.addEventListener('click', function (e) {
+    var side = document.getElementById('sideCard');
+    if (!side || !side.classList.contains('open')) return;
+    if (side.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('[data-act="toggle-card"]')) return;
+    side.classList.remove('open');
+  });
+
+  window.addEventListener('beforeunload', function () { if (sess) persistPos(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden' && sess) persistPos();
+  });
+
+  /* ---------------- boot ---------------- */
+  if (!PAPERS.length) {
+    app.appendChild(el('div', 'empty', '题库数据未加载，请检查 data/questions.js 是否存在'));
+  } else {
+    render();
+  }
+})();

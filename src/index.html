@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b5bdb">
+<title>人工智能训练师 · 理论自测练习</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="logo">AI</div>
+      <div>人工智能训练师 · 理论自测
+        <small>2026 广东省人工智能与机器人技能大赛</small>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button class="top-link" data-nav="home">首页</button>
+    <button class="top-link" data-nav="wrong">错题本 <span id="navWrong"></span></button>
+    <button class="top-link" data-nav="key">答案管理</button>
+  </div>
+</header>
+
+<main class="wrap" id="app"></main>
+<div class="toast" id="toast"></div>
+<div id="modalRoot"></div>
+
+<!-- ============ 首页 ============ -->
+<template id="tpl-home">
+  <section class="view-enter">
+    <div class="hero">
+      <h1>理论自测 · 三套模拟卷</h1>
+      <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）考前练习</p>
+      <div class="hero-chips">
+        <span class="chip">A / B / C 三套</span>
+        <span class="chip">每套 100 题</span>
+        <span class="chip">单选 60 · 多选 10 · 判断 30</span>
+        <span class="chip">限时 90 分钟</span>
+      </div>
+      <div class="hero-actions">
+        <button class="btn btn-primary" data-act="random-exam">随机模拟考（50 题）</button>
+        <button class="btn btn-ghost" data-act="open-wrong">错题重练</button>
+      </div>
+    </div>
+    <div class="notice ok" id="notice">
+      <span>✅</span>
+      <div><b>答案已核对官方：</b>三套共 300 题的答案，均按问卷星交卷结果页逐题校准（2026-10-26），与官方判分一致。如考务组后续调整答案，可在「答案管理」中粘贴覆盖。</div>
+    </div>
+    <div class="section-title"><h2>选择试卷</h2><span>建议先做一套完整模拟，再针对性刷错题</span></div>
+    <div class="paper-grid" id="paperGrid"></div>
+    <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
+    <div class="mini-grid" id="miniGrid"></div>
+    <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
+    <div class="kpis" id="homeKpis"></div>
+  </section>
+</template>
+
+<template id="tpl-paper-card">
+  <article class="paper-card">
+    <h3><span class="dot"></span><span class="p-title"></span></h3>
+    <div class="meta">100 题 · 90 分钟 · 满分 100</div>
+    <div class="stat">
+      <div><b class="p-score">—</b><span>最高分</span></div>
+      <div class="sep"></div>
+      <div><b class="p-done">0</b><span>已答</span></div>
+    </div>
+    <div class="ops">
+      <button class="btn btn-primary" data-act="card-exam">开始考试</button>
+      <button class="btn" data-act="card-practice">练习模式</button>
+    </div>
+    <button class="btn btn-sm btn-ghost p-resume hidden" data-act="card-resume">继续上次作答</button>
+  </article>
+</template>
+
+<template id="tpl-kpi">
+  <div class="kpi"><span></span><b></b></div>
+</template>
+
+<!-- ============ 开始设置 ============ -->
+<template id="tpl-start">
+  <div class="modal-mask">
+    <div class="modal start-modal">
+      <h3></h3>
+      <p class="start-sub"></p>
+      <div class="opt-row">
+        <label>出题顺序</label>
+        <div class="seg" id="segOrder">
+          <button type="button" data-order="seq">顺序</button>
+          <button type="button" data-order="random">随机</button>
+        </div>
+      </div>
+      <div class="opt-row">
+        <label>题型</label>
+        <div class="checks" id="typeChecks">
+          <label><input type="checkbox" value="single" checked> 单选题</label>
+          <label><input type="checkbox" value="multi" checked> 多选题</label>
+          <label><input type="checkbox" value="judge" checked> 判断题</label>
+        </div>
+      </div>
+      <p class="start-warn hidden"></p>
+      <p class="start-note"></p>
+      <div class="acts">
+        <button class="btn" data-act="start-cancel">取消</button>
+        <button class="btn btn-primary" data-act="start-ok">开始</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ============ 答题 ============ -->
+<template id="tpl-quiz">
+  <section class="quiz-shell view-enter">
+    <div class="quiz-top">
+      <button class="btn btn-sm btn-ghost" data-act="exit">← 返回</button>
+      <div class="title" id="qTitle"></div>
+      <span class="tag gray" id="qModeTag"></span>
+      <button class="btn btn-sm order-btn" data-act="order-toggle" id="btnOrder" title="切换出题顺序">顺序</button>
+      <span class="qtop-spacer"></span>
+      <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
+      <div class="qtop-actions">
+        <button class="btn btn-sm drawer-btn" data-act="toggle-card">答题卡</button>
+        <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
+      </div>
+    </div>
+    <div class="quiz-body">
+      <div class="q-card">
+        <div class="q-head">
+          <span class="num" id="qNo"></span>
+          <span class="tag" id="qType"></span>
+          <span id="qHint"></span>
+          <button class="fav" data-act="fav" title="收藏本题">☆</button>
+        </div>
+        <h2 class="q-stem" id="qStem"></h2>
+        <div class="opts" id="qOpts"></div>
+        <div class="feedback hidden" id="qFeedback"></div>
+        <div class="q-foot">
+          <button class="btn btn-sm" data-act="confirm-multi" id="btnConfirmMulti">确认作答</button>
+          <button class="btn btn-sm" data-act="mark" id="btnMark">标记</button>
+          <button class="btn btn-sm" data-act="clear" id="btnClear">清空本题</button>
+          <span class="hint kbd-hint">键盘：A–D 选择 · ← → 切题</span>
+          <span class="spacer"></span>
+          <button class="btn btn-sm" data-act="prev">上一题</button>
+          <button class="btn btn-primary btn-sm" data-act="next">下一题</button>
+        </div>
+      </div>
+      <aside class="side" id="sideCard">
+        <h4>答题卡 <span id="cardProgress"></span></h4>
+        <div class="cards" id="cards"></div>
+        <div class="legend">
+          <span><i class="l1"></i>已答</span>
+          <span><i class="l2"></i>未答</span>
+          <span><i class="l3"></i>标记</span>
+        </div>
+        <div class="mini-info">
+          <div><b id="infoDone">0</b>已答</div>
+          <div><b id="infoFlag">0</b>标记</div>
+          <div><b id="infoLeft">100</b>未答</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-option">
+  <div class="opt" data-letter="">
+    <span class="letter"></span>
+    <span class="txt"></span>
+    <span class="mark"></span>
+  </div>
+</template>
+
+<template id="tpl-cell">
+  <button class="cell" data-idx=""></button>
+</template>
+
+<!-- ============ 结果 ============ -->
+<template id="tpl-result">
+  <section class="view-enter">
+    <div class="result-hero">
+      <div class="score-ring">
+        <svg viewBox="0 0 150 150" width="100%" height="100%">
+          <circle cx="75" cy="75" r="64" fill="none" stroke="#eef1f7" stroke-width="12"></circle>
+          <circle id="ring" cx="75" cy="75" r="64" fill="none" stroke="#3b5bdb" stroke-width="12"
+                  stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="402"></circle>
+        </svg>
+        <div class="val"><b id="scoreVal">0</b><span id="scoreOf">得分</span></div>
+      </div>
+      <div class="result-main">
+        <h1 id="resTitle">交卷完成</h1>
+        <div class="sub" id="resSub"></div>
+        <div class="result-actions">
+          <button class="btn btn-primary" data-act="retry">重做本卷</button>
+          <button class="btn" data-act="to-wrong">去错题本</button>
+          <button class="btn" data-act="home">返回首页</button>
+        </div>
+      </div>
+    </div>
+    <div class="kpis" id="resKpis"></div>
+    <div class="section-title">
+      <h2>逐题回顾</h2>
+      <span id="revToggle" style="cursor:pointer;color:var(--brand)">只看错题</span>
+    </div>
+    <div class="review" id="review"></div>
+  </section>
+</template>
+
+<template id="tpl-review">
+  <div class="rev-item">
+    <div class="rh"><span class="no"></span><span class="tag"></span><span class="badge-wrap"></span></div>
+    <div class="rs"></div>
+    <div class="ro ro-my"><b>你的答案：</b><span></span></div>
+    <div class="ro ro-ck"><b>参考答案：</b><span></span></div>
+  </div>
+</template>
+
+<!-- ============ 列表（错题/收藏） ============ -->
+<template id="tpl-list">
+  <section class="view-enter">
+    <div class="panel">
+      <h2 id="listTitle"></h2>
+      <p class="desc" id="listDesc"></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn btn-primary" data-act="list-practice">开始重练</button>
+        <button class="btn" data-act="list-clear">清空列表</button>
+      </div>
+      <div class="list" id="listBody"></div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-row">
+  <div class="row">
+    <span class="tag"></span>
+    <div class="grow">
+      <div class="qtext"></div>
+      <div class="qsub"></div>
+    </div>
+    <button class="btn btn-sm btn-ghost" data-act="row-go">查看</button>
+    <button class="btn btn-sm btn-ghost" data-act="row-del">移除</button>
+  </div>
+</template>
+
+<!-- ============ 学习记录 ============ -->
+<template id="tpl-history">
+  <section class="view-enter">
+    <div class="panel">
+      <h2>学习记录</h2>
+      <p class="desc" id="hisDesc"></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn btn-sm" data-act="his-export">导出记录（JSON）</button>
+        <button class="btn btn-sm" data-act="his-clear" style="color:var(--bad)">清空记录</button>
+      </div>
+      <div class="list" id="hisList"></div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-his-row">
+  <div class="row his-row">
+    <div class="his-score"><b></b><span></span></div>
+    <div class="grow">
+      <div class="qtext his-title"></div>
+      <div class="qsub his-meta"></div>
+    </div>
+    <span class="ans-badge mid his-pct"></span>
+  </div>
+</template>
+
+<!-- ============ 答案管理 ============ -->
+<template id="tpl-key">
+  <section class="view-enter">
+    <div class="panel">
+      <h2>答案管理</h2>
+      <p class="desc">
+        这里可以批量修正标准答案（例如按问卷星交卷后显示的官方答案）。格式：每行「题号 答案」，如 <b>1 D</b>、<b>12 AB</b>；
+        也支持 <b>1D</b>、<b>1、D</b> 或用逗号、分号分隔。保存后所有成绩、错题会按新答案重算。
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <select id="keyPaper">
+          <option value="A">自测卷 A</option>
+          <option value="B">自测卷 B</option>
+          <option value="C">自测卷 C</option>
+        </select>
+        <button class="btn btn-sm" data-act="key-load">载入当前答案</button>
+        <button class="btn btn-sm" data-act="key-reset">恢复默认答案</button>
+        <span class="hint" id="keyStat"></span>
+      </div>
+      <textarea id="keyText" spellcheck="false" placeholder="1 D&#10;2 B&#10;3 A"></textarea>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-primary" data-act="key-apply">保存并重新计分</button>
+        <button class="btn" data-act="key-export">导出全部答案（JSON）</button>
+        <button class="btn" data-act="key-import">导入答案（JSON）</button>
+        <button class="btn" data-act="key-reset-all" style="margin-left:auto;color:var(--bad)">重置全部进度</button>
+      </div>
+      <p class="desc" style="margin-top:16px;margin-bottom:0">
+        <b>提示：</b>「恢复默认答案」只会清除你手动修改过的题目，回到页面自带答案。
+      </p>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-modal">
+  <div class="modal-mask">
+    <div class="modal">
+      <h3></h3>
+      <p></p>
+      <div class="acts">
+        <button class="btn" data-act="modal-cancel">取消</button>
+        <button class="btn btn-primary" data-act="modal-ok">确定</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script src="data/questions.js"></script>
+<script src="data/answers.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

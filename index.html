@@ -1,963 +1,1745 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>理论题库练习系统</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js">
-    </script>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: #f0f2f5;
-            color: #1e293b;
-            padding: 20px;
-        }
-        .container {
-            max-width: 920px;
-            margin: 0 auto;
-            background: #fff;
-            border-radius: 16px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-            padding: 24px 28px;
-        }
-        h1 {
-            font-size: 26px;
-            font-weight: 600;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 12px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .upload-area {
-            background: #f8fafc;
-            border: 1px dashed #94a3b8;
-            border-radius: 10px;
-            padding: 16px;
-            margin-bottom: 20px;
-        }
-        .upload-area textarea {
-            width: 100%;
-            height: 180px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            padding: 10px;
-            font-size: 13px;
-            font-family: 'Courier New', monospace;
-            resize: vertical;
-        }
-        .upload-area .file-input-wrapper {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        .upload-area .btn {
-            background: #3b82f6;
-            color: white;
-            border: none;
-            padding: 8px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: 0.2s;
-        }
-        .upload-area .btn:hover {
-            background: #2563eb;
-        }
-        .upload-area .btn-secondary {
-            background: #e2e8f0;
-            color: #1e293b;
-        }
-        .upload-area .btn-secondary:hover {
-            background: #cbd5e1;
-        }
-        .upload-area .file-status {
-            font-size: 13px;
-            color: #16a34a;
-            margin-left: 8px;
-        }
-        .parse-summary {
-            background: #eef2ff;
-            border-radius: 8px;
-            padding: 10px 14px;
-            margin-top: 10px;
-            font-size: 14px;
-            color: #1e293b;
-            display: none;
-        }
-        .parse-summary span {
-            font-weight: 600;
-        }
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f1f5f9;
-            padding: 10px 16px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .status-bar .info {
-            font-size: 14px;
-            color: #475569;
-        }
-        .status-bar .info span {
-            font-weight: 600;
-            color: #0f172a;
-        }
-        .nav-area {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .nav-area input {
-            width: 60px;
-            padding: 6px 8px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            text-align: center;
-            font-size: 14px;
-        }
-        .nav-area button {
-            background: #e2e8f0;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: 0.2s;
-        }
-        .nav-area button:hover {
-            background: #cbd5e1;
-        }
-        .nav-area button.primary {
-            background: #3b82f6;
-            color: white;
-        }
-        .nav-area button.primary:hover {
-            background: #2563eb;
-        }
-        .question-card {
-            padding: 16px 0;
-        }
-        .question-header {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        .question-type {
-            display: inline-block;
-            background: #dbeafe;
-            color: #1d4ed8;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 2px 10px;
-            border-radius: 12px;
-            margin-left: 8px;
-        }
-        .options {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin: 12px 0 16px;
-        }
-        .option-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 14px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 2px solid transparent;
-            cursor: pointer;
-            transition: 0.15s;
-        }
-        .option-item:hover:not(.disabled) {
-            background: #eef2ff;
-            border-color: #a5b4fc;
-        }
-        .option-item.selected {
-            border-color: #3b82f6;
-            background: #eff6ff;
-        }
-        .option-item.correct {
-            border-color: #22c55e;
-            background: #f0fdf4;
-        }
-        .option-item.wrong {
-            border-color: #ef4444;
-            background: #fef2f2;
-        }
-        .option-item.disabled {
-            cursor: default;
-            opacity: 0.9;
-        }
-        .option-item .label {
-            font-weight: 600;
-            min-width: 24px;
-            color: #64748b;
-        }
-        .option-item .text {
-            flex: 1;
-        }
-        .option-item .result-icon {
-            font-size: 20px;
-            margin-left: auto;
-        }
-        .feedback {
-            background: #f1f5f9;
-            border-radius: 10px;
-            padding: 14px 18px;
-            margin-top: 12px;
-            border-left: 4px solid #94a3b8;
-        }
-        .feedback .fb-correct {
-            color: #16a34a;
-            font-weight: 600;
-        }
-        .feedback .fb-wrong {
-            color: #dc2626;
-            font-weight: 600;
-        }
-        .feedback .fb-answer {
-            margin-top: 4px;
-        }
-        .feedback .fb-explain {
-            margin-top: 6px;
-            color: #475569;
-            font-size: 14px;
-            background: #f8fafc;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border-left: 3px solid #94a3b8;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        .progress-stats {
-            margin-top: 16px;
-            display: flex;
-            gap: 20px;
-            font-size: 14px;
-            color: #475569;
-            flex-wrap: wrap;
-        }
-        .progress-stats span {
-            background: #f1f5f9;
-            padding: 4px 12px;
-            border-radius: 20px;
-        }
-        .empty-msg {
-            color: #94a3b8;
-            text-align: center;
-            padding: 40px 0;
-            font-size: 16px;
-        }
-        .btn-group {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-            align-items: center;
-        }
-        .btn-submit {
-            background: #22c55e;
-            color: white;
-            border: none;
-            padding: 10px 28px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .btn-submit:hover {
-            background: #16a34a;
-        }
-        .btn-nav {
-            background: #e2e8f0;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .btn-nav:hover {
-            background: #cbd5e1;
-        }
-        .btn-nav.primary {
-            background: #3b82f6;
-            color: white;
-        }
-        .btn-nav.primary:hover {
-            background: #2563eb;
-        }
-        .filter-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-            flex-wrap: wrap;
-        }
-        .filter-tabs button {
-            padding: 4px 16px;
-            border-radius: 20px;
-            border: 1px solid #cbd5e1;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            transition: 0.2s;
-        }
-        .filter-tabs button.active {
-            background: #3b82f6;
-            color: white;
-            border-color: #3b82f6;
-        }
-        .filter-tabs button:hover:not(.active) {
-            background: #e2e8f0;
-        }
-        .keyboard-hint {
-            font-size: 12px;
-            color: #94a3b8;
-            margin-left: 12px;
-        }
-        @media (max-width: 600px) {
-            .container {
-                padding: 16px;
-            }
-            .status-bar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .btn-group {
-                flex-direction: column;
-                align-items: stretch;
-            }
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b5bdb">
+<!-- 单文件版：可直接双击打开，也可发给同学 -->
+<title>人工智能训练师 · 理论自测练习</title>
+<style>
+
+:root{
+  --bg:#f4f6fb; --card:#ffffff; --ink:#0f172a; --ink-2:#475569; --ink-3:#94a3b8;
+  --line:#e6eaf2; --brand:#3b5bdb; --brand-2:#5c7cfa; --brand-soft:#edf1ff;
+  --ok:#16a34a; --ok-soft:#e8f7ee; --bad:#dc2626; --bad-soft:#fdeceb;
+  --warn:#d97706; --warn-soft:#fff5e6; --radius:16px;
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.06);
+  --shadow-lg:0 20px 50px rgba(15,23,42,.14);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+a{color:var(--brand);text-decoration:none}
+::selection{background:#cfd9ff}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:40; backdrop-filter:blur(10px);
+  background:rgba(255,255,255,.86); border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width:1180px; margin:0 auto; padding:10px 18px;
+  display:flex; align-items:center; gap:14px; min-height:58px;
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px;min-width:0;flex:1 1 auto}
+.brand>div:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brand .logo{
+  width:30px;height:30px;border-radius:9px;flex:none;
+  background:linear-gradient(135deg,var(--brand),#7c3aed);
+  display:grid;place-items:center;color:#fff;font-size:14px;font-weight:800;
+  box-shadow:0 4px 12px rgba(59,91,219,.35);
+}
+.brand small{display:block;font-weight:500;color:var(--ink-3);font-size:11px;letter-spacing:.4px}
+.topbar .spacer{flex:0 0 auto}
+.top-link{
+  border:1px solid var(--line); background:#fff; color:var(--ink-2);
+  padding:7px 12px; border-radius:10px; font-size:13px; display:inline-flex; gap:6px; align-items:center;
+  transition:.15s; white-space:nowrap;
+}
+.top-link:hover{color:var(--brand);border-color:#c7d2fe;background:#f8faff}
+.top-link.active{background:var(--brand-soft);border-color:#c7d2fe;color:var(--brand);font-weight:600}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:22px 18px 70px}
+.view-enter{animation:fade .28s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- home ---------- */
+.hero{
+  position:relative; overflow:hidden; border-radius:22px; padding:30px 30px 26px;
+  background:linear-gradient(120deg,#2b3fb8 0%,#3b5bdb 42%,#6d4bd8 100%);
+  color:#fff; box-shadow:0 18px 40px rgba(43,63,184,.28);
+}
+.hero:after{
+  content:""; position:absolute; right:-90px; top:-120px; width:320px; height:320px;
+  background:radial-gradient(circle,rgba(255,255,255,.22),transparent 62%); border-radius:50%;
+}
+.hero h1{margin:0 0 8px;font-size:26px;letter-spacing:.5px}
+.hero p{margin:0;color:rgba(255,255,255,.82);font-size:13.5px}
+.hero .hero-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.hero .chip{
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
+  padding:6px 12px; border-radius:999px; font-size:12.5px; backdrop-filter:blur(4px);
+}
+.hero .hero-actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+.hero .btn-primary{background:#fff;color:#2b3fb8}
+.hero .btn-primary:hover{background:#eef1ff}
+.hero .btn-ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)}
+.hero .btn-ghost:hover{background:rgba(255,255,255,.22)}
+
+.section-title{display:flex;align-items:baseline;gap:10px;margin:30px 2px 14px}
+.section-title h2{margin:0;font-size:17px;letter-spacing:.3px}
+.section-title span{color:var(--ink-3);font-size:12.5px}
+
+.paper-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.paper-card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px;box-shadow:var(--shadow);transition:.2s;display:flex;flex-direction:column;gap:14px;
+  position:relative;overflow:hidden;
+}
+.paper-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:#c7d2fe}
+.paper-card .ribbon{
+  position:absolute;top:14px;right:-32px;transform:rotate(38deg);
+  background:var(--ok);color:#fff;font-size:11px;padding:4px 38px;letter-spacing:1px;
+}
+.paper-card h3{margin:0;font-size:18px;display:flex;align-items:center;gap:8px}
+.paper-card h3 .dot{width:9px;height:9px;border-radius:50%;background:var(--brand)}
+.paper-card .meta{color:var(--ink-3);font-size:12.5px;margin-top:-8px}
+.paper-card .stat{
+  display:flex;align-items:center;gap:12px;background:#f8faff;border:1px dashed #dbe3ff;
+  padding:10px 12px;border-radius:12px;font-size:12.5px;color:var(--ink-2);
+}
+.paper-card .stat b{display:block;font-size:19px;color:var(--brand);font-weight:700;line-height:1.25}
+.paper-card .stat span{font-size:11.5px;color:var(--ink-3)}
+.paper-card .stat .sep{width:1px;height:26px;background:#dbe3ff}
+.paper-card .ops{display:flex;gap:8px;margin-top:auto}
+.paper-card .ops .btn{flex:1}
+
+.btn{
+  border:1px solid var(--line); background:#fff; color:var(--ink);
+  padding:9px 14px; border-radius:11px; font-size:13.5px; font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  transition:.16s; white-space:nowrap;
+}
+.btn:hover{border-color:#c7d2fe;background:#f8faff;color:var(--brand)}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--brand);border-color:var(--brand);color:#fff;
+  box-shadow:0 6px 16px rgba(59,91,219,.28)}
+.btn-primary:hover{background:#3450c9;border-color:#3450c9;color:#fff}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--ink-2)}
+.btn-sm{padding:6px 10px;font-size:12.5px;border-radius:9px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+
+.mini-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.mini-card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;
+  box-shadow:var(--shadow);display:flex;align-items:center;gap:14px;cursor:pointer;transition:.18s;
+}
+.mini-card:hover{border-color:#c7d2fe;transform:translateY(-1px);box-shadow:var(--shadow-lg)}
+.mini-card .ico{
+  width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;font-size:19px;
+  background:var(--brand-soft);
+}
+.mini-card .ico.warn{background:var(--warn-soft)}
+.mini-card .ico.ok{background:var(--ok-soft)}
+.mini-card h4{margin:0;font-size:14.5px}
+.mini-card p{margin:1px 0 0;color:var(--ink-3);font-size:12px}
+
+.notice{
+  display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;
+  background:var(--warn-soft);border:1px solid #fde3bd;color:#8a5a10;font-size:12.8px;margin-top:16px;
+}
+.notice b{color:#7a4b06}
+.notice.ok{background:#eefaf3;border-color:#bbf7d0;color:#0f7a3d}
+.notice.ok b{color:#0b6b34}
+.notice .x{margin-left:auto;background:none;border:0;color:#b07b2d;font-size:16px;line-height:1}
+
+/* ---------- quiz ---------- */
+.quiz-shell{padding-top:6px}
+.quiz-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.quiz-top .title{font-weight:700;font-size:16px}
+.qtop-spacer{flex:1}
+.qtop-actions{display:flex;gap:8px;align-items:center}
+.tag{
+  font-size:11.5px;padding:3px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);
+  font-weight:700;letter-spacing:.3px;
+}
+.tag.gray{background:#eef1f7;color:var(--ink-2)}
+.tag.judge{background:#eafaf0;color:#0f8a45}
+.tag.multi{background:#fff1e6;color:#b45309}
+.timer{
+  margin-left:auto;display:flex;align-items:center;gap:7px;
+  font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;color:var(--ink-2);
+  background:#fff;border:1px solid var(--line);padding:6px 12px;border-radius:11px;box-shadow:var(--shadow);
+}
+.timer.warn{color:var(--bad);border-color:#fecaca;background:#fff5f5;animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.62}}
+
+.quiz-body{display:grid;grid-template-columns:minmax(0,1fr) 306px;gap:18px;align-items:start}
+.q-card{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 26px 18px;
+  box-shadow:var(--shadow);min-height:400px;
+}
+.q-head{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12.5px;margin-bottom:12px}
+.q-head .num{color:var(--brand);font-weight:800;font-size:13px}
+.q-head .fav{margin-left:auto;border:0;background:none;font-size:17px;line-height:1;color:#d7dce8;padding:2px}
+.q-head .fav.on{color:#f59e0b}
+.q-stem{
+  font-size:17.5px;line-height:1.8;font-weight:600;color:#111827;margin:0 0 18px;
+  white-space:pre-wrap;word-break:break-word;
+}
+.q-stem .blank{color:var(--brand)}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{
+  display:flex;gap:12px;align-items:flex-start;padding:13px 15px;border-radius:13px;
+  border:1.5px solid var(--line);background:#fcfdff;cursor:pointer;transition:.14s;position:relative;
+}
+.opt:hover{border-color:#c7d2fe;background:#f6f9ff}
+.opt .letter{
+  width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;
+  font-size:13px;font-weight:800;background:#eef1f7;color:var(--ink-2);transition:.14s;
+}
+.opt .txt{flex:1;font-size:15px;color:#1f2937;word-break:break-word}
+.opt.sel{border-color:var(--brand);background:var(--brand-soft);box-shadow:0 0 0 3px rgba(59,91,219,.09)}
+.opt.sel .letter{background:var(--brand);color:#fff}
+.opt.correct{border-color:#86efac;background:var(--ok-soft)}
+.opt.correct .letter{background:var(--ok);color:#fff}
+.opt.wrong{border-color:#fca5a5;background:var(--bad-soft)}
+.opt.wrong .letter{background:var(--bad);color:#fff}
+.opt .mark{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--ok);align-self:center}
+.opt.wrong .mark{color:var(--bad)}
+
+.feedback{
+  margin-top:16px;border-radius:12px;padding:11px 14px;font-size:13.5px;display:flex;gap:8px;align-items:center;
+  background:var(--ok-soft);color:#0f7a3d;border:1px solid #bbf7d0;
+}
+.feedback.bad{background:var(--bad-soft);color:#b91c1c;border-color:#fecaca}
+.feedback.unknown{background:#eef2f7;color:var(--ink-2);border-color:#e2e8f0}
+
+.q-foot{display:flex;align-items:center;gap:10px;margin-top:22px;padding-top:14px;border-top:1px dashed var(--line)}
+.q-foot .spacer{flex:1}
+.hint{color:var(--ink-3);font-size:12px}
+
+/* answer card */
+.side{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:var(--shadow);
+  position:sticky;top:76px;
+}
+.side h4{margin:0 0 10px;font-size:13.5px;display:flex;align-items:center;gap:6px}
+.side h4 span{margin-left:auto;color:var(--ink-3);font-weight:500;font-size:12px}
+.cards{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}
+.cell{
+  aspect-ratio:1;border-radius:7px;border:1px solid var(--line);background:#fbfcff;color:var(--ink-2);
+  font-size:11.5px;font-weight:600;display:grid;place-items:center;padding:0;transition:.12s;
+}
+.cell:hover{border-color:var(--brand);color:var(--brand)}
+.cell.done{background:var(--brand-soft);border-color:#c7d2fe;color:var(--brand)}
+.cell.cur{outline:2px solid var(--brand);outline-offset:1px}
+.cell.flag:after{
+  content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--warn);
+}
+.cell{position:relative}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:11.5px;color:var(--ink-3)}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:-1px}
+.legend .l1{background:var(--brand-soft);border:1px solid #c7d2fe}
+.legend .l2{background:#fff;border:1px solid var(--line)}
+.legend .l3{background:var(--warn)}
+
+.side .mini-info{display:flex;gap:8px;margin-top:14px;font-size:12px;color:var(--ink-2)}
+.side .mini-info div{flex:1;background:#f8faff;border-radius:9px;padding:7px 8px;text-align:center}
+.side .mini-info b{display:block;font-size:15px;color:var(--brand)}
+
+/* ---------- result ---------- */
+.result-hero{
+  background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:var(--shadow);
+  display:flex;gap:28px;align-items:center;flex-wrap:wrap;
+}
+.score-ring{position:relative;width:150px;height:150px;flex:none}
+.score-ring svg{transform:rotate(-90deg)}
+.score-ring .val{
+  position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+}
+.score-ring .val{flex-direction:column;display:flex;align-items:center;justify-content:center;gap:2px}
+.score-ring .val b{font-size:36px;line-height:1;display:block;letter-spacing:-1px}
+.score-ring .val span{font-size:11px;color:var(--ink-3)}
+.result-main{flex:1;min-width:260px}
+.result-main h1{margin:0 0 6px;font-size:22px}
+.result-main .sub{color:var(--ink-3);font-size:13px}
+.result-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
+.kpi{background:#f8faff;border:1px solid #e8edfb;border-radius:12px;padding:12px}
+.kpi span{color:var(--ink-3);font-size:12px}
+.kpi b{display:block;font-size:18px;margin-top:2px}
+
+.review{margin-top:22px;display:flex;flex-direction:column;gap:12px}
+.rev-item{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+  border-left:4px solid var(--ok);
+}
+.rev-item.bad{border-left-color:var(--bad)}
+.rev-item .rh{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-3);margin-bottom:8px}
+.rev-item .rh .no{color:var(--ink);font-weight:700}
+.rev-item .rs{font-size:14.5px;font-weight:600;margin-bottom:10px;white-space:pre-wrap}
+.rev-item .ro{font-size:13.5px;color:var(--ink-2);margin:3px 0;display:flex;gap:8px}
+.rev-item .ro b{font-weight:700;color:var(--ink)}
+.ans-badge{font-size:11.5px;padding:2px 8px;border-radius:999px;font-weight:700}
+.ans-badge.ok{background:var(--ok-soft);color:#0f7a3d}
+.ans-badge.bad{background:var(--bad-soft);color:#b91c1c}
+.ans-badge.mid{background:#eef2f7;color:var(--ink-2)}
+
+/* ---------- misc ---------- */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+.panel h2{margin:0 0 6px;font-size:17px}
+.panel p.desc{color:var(--ink-2);font-size:13.5px;margin:0 0 16px}
+textarea{
+  width:100%;min-height:240px;border:1px solid var(--line);border-radius:12px;padding:12px;font-family:ui-monospace,Consolas,monospace;
+  font-size:13px;line-height:1.7;resize:vertical;background:#fcfdff;color:var(--ink);
+}
+textarea:focus{outline:none;border-color:#c7d2fe;box-shadow:0 0 0 3px rgba(59,91,219,.1)}
+select{
+  border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;font-size:13.5px;
+}
+.list{display:flex;flex-direction:column;gap:10px}
+.row{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;
+}
+.row .grow{flex:1;min-width:0}
+.row .qtext{font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .qsub{font-size:11.5px;color:var(--ink-3)}
+.empty{text-align:center;color:var(--ink-3);padding:48px 0;font-size:13.5px}
+.empty .big{font-size:34px;display:block;margin-bottom:8px;opacity:.7}
+
+.toast{
+  position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);
+  background:rgba(17,24,39,.94);color:#fff;padding:10px 18px;border-radius:12px;font-size:13.5px;
+  opacity:0;pointer-events:none;transition:.24s;z-index:99;box-shadow:0 12px 30px rgba(0,0,0,.25);max-width:86vw;text-align:center;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.modal-mask{
+  position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);z-index:60;
+  display:grid;place-items:center;padding:20px;animation:fade .18s;
+}
+.modal{
+  background:#fff;border-radius:18px;padding:24px;max-width:420px;width:100%;box-shadow:var(--shadow-lg);
+}
+.modal h3{margin:0 0 8px;font-size:17px}
+.modal p{margin:0 0 18px;color:var(--ink-2);font-size:13.5px;line-height:1.7}
+.modal .acts{display:flex;gap:10px;justify-content:flex-end}
+
+.drawer-btn{display:none}
+@media (max-width:900px){
+  .paper-grid,.mini-grid{grid-template-columns:1fr}
+  .quiz-body{grid-template-columns:1fr}
+  .side{
+    position:fixed;right:0;top:0;bottom:0;width:300px;max-width:86vw;border-radius:0;z-index:50;
+    transform:translateX(105%);transition:.24s;overflow:auto;padding-top:20px;box-shadow:-10px 0 40px rgba(15,23,42,.18);
+  }
+  .side.open{transform:none}
+  .drawer-btn{display:inline-flex}
+  .q-card{padding:18px 16px}
+  .q-stem{font-size:16px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hero{padding:22px 18px}
+  .hero h1{font-size:21px}
+  .result-hero{gap:18px}
+  .score-ring{width:120px;height:120px}
+  .score-ring .val b{font-size:30px}
+  .topbar-inner{padding:8px 10px;gap:6px;min-height:52px}
+  .brand{gap:8px}
+  .brand>div:last-child{font-size:12.5px}
+  .brand small{display:none}
+  .brand .logo{width:26px;height:26px;border-radius:8px;font-size:12px}
+  .top-link{padding:6px 8px;font-size:12px;border-radius:9px}
+  .cell{font-size:10.5px}
+}
+/* start dialog */
+.start-modal{max-width:480px}
+.start-sub{margin-bottom:2px}
+.opt-row{display:flex;align-items:center;gap:12px;margin:16px 0}
+.opt-row>label{width:62px;flex:none;color:var(--ink-2);font-size:13px}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:7px 18px;font-size:13px;color:var(--ink-2);transition:.14s}
+.seg button.on{background:var(--brand);color:#fff;font-weight:600}
+.checks{display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px;color:var(--ink)}
+.checks label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.start-note{font-size:12.5px;color:var(--ink-3);margin:14px 0 0}
+.start-warn{font-size:12.5px;color:#9a5b04;background:var(--warn-soft);border:1px solid #fde3bd;border-radius:10px;padding:8px 10px;margin:12px 0 0}
+.order-btn.on{background:var(--brand-soft);border-color:#c7d2fe;color:var(--brand)}
+
+/* history */
+.his-row{gap:14px}
+.his-score{width:66px;flex:none;text-align:center;border-right:1px dashed var(--line);padding-right:10px}
+.his-score b{display:block;font-size:15px;color:var(--brand)}
+.his-score span{font-size:11px;color:var(--ink-3)}
+.his-pct{flex:none}
+.his-title{font-size:13.5px}
+
+.hidden{display:none!important}
+.kbd-hint{opacity:.75}
+@media (max-width:900px){.kbd-hint{display:none}}
+@media (max-width:560px){
+  .opt-row{flex-direction:column;align-items:flex-start;gap:7px;margin:13px 0}
+  .opt-row>label{width:auto;font-size:12.5px}
+  .checks{gap:14px}
+  .quiz-top{gap:6px;row-gap:8px}
+  .quiz-top .tag.gray{display:none}
+  .quiz-top .title{font-size:14.5px;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .quiz-top .timer{font-size:14.5px;padding:5px 9px}
+  .qtop-actions{margin-left:auto}
+  .order-btn{padding:5px 8px}
+}
+
+</style>
 </head>
 <body>
-    <div class="container" id="app">
-        <h1>📚 理论题库练习 <span style="font-size:14px;font-weight:400;color:#64748b;">2026 省赛</span></h1>
 
-        <div class="upload-area">
-            <div style="font-weight:500;margin-bottom:6px;">📂 粘贴题库内容 或 上传 .docx 文件</div>
-            <textarea id="rawInput" placeholder="将文档中的全部题目（含选项和解析）粘贴到这里..."></textarea>
-            <div class="file-input-wrapper">
-                <button class="btn" onclick="loadFromText()">📥 加载题目</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">📎 选择文件</button>
-                <input type="file" id="fileInput" accept=".docx,.txt,.md" style="display:none" onchange="loadFromFile(event)" />
-                <span id="fileStatus" class="file-status"></span>
-            </div>
-            <div id="parseSummary" class="parse-summary"></div>
-            <div style="margin-top:6px;font-size:13px;color:#64748b;">💡 支持 .docx / .txt / .md，内置示例数据可直接体验</div>
-        </div>
-
-        <div class="status-bar" id="statusBar" style="display:none;">
-            <div class="info">
-                共 <span id="totalCount">0</span> 题 &nbsp;|&nbsp; 当前 <span id="currentIdxDisplay">1</span>
-                &nbsp;|&nbsp; <span id="filterInfo">全部</span>
-                &nbsp;|&nbsp; 错题 <span id="wrongCount">0</span>
-            </div>
-            <div class="nav-area">
-                <button onclick="goQuestion(-1)">◀ 上一题</button>
-                <input type="number" id="jumpInput" min="1" value="1" />
-                <button class="primary" onclick="jumpTo()">跳转</button>
-                <button onclick="goQuestion(1)">下一题 ▶</button>
-                <button class="primary" onclick="submitAll()" style="background:#22c55e;margin-left:8px;">📊 提交</button>
-            </div>
-        </div>
-
-        <div id="filterTabs" style="display:none;">
-            <div class="filter-tabs">
-                <button class="active" data-filter="all" onclick="setFilter('all')">全部</button>
-                <button data-filter="single" onclick="setFilter('single')">单选题</button>
-                <button data-filter="judge" onclick="setFilter('judge')">判断题</button>
-                <button data-filter="wrong" onclick="setFilter('wrong')">📕 错题本</button>
-            </div>
-        </div>
-
-        <div id="questionCard" style="display:none;">
-            <div class="question-card">
-                <div class="question-header">
-                    <span id="qNumber">1</span>. <span id="qType" class="question-type">单选</span>
-                    <span id="qTitle"></span>
-                </div>
-                <div id="optionsContainer" class="options"></div>
-                <div id="feedback" class="feedback" style="display:none;"></div>
-            </div>
-            <div class="progress-stats" id="progressStats"></div>
-            <div class="btn-group">
-                <button class="btn-nav" onclick="goQuestion(-1)">◀ 上一题</button>
-                <button class="btn-nav" onclick="goQuestion(1)">下一题 ▶</button>
-                <button class="btn-submit" onclick="submitAll()">📊 提交并查看成绩</button>
-                <span class="keyboard-hint">快捷键: ←/→ 或 W/S 或 A/D</span>
-            </div>
-        </div>
-
-        <div id="emptyMsg" class="empty-msg">⬆️ 请粘贴题目或上传文件后点击“加载题目”开始练习</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="logo">AI</div>
+      <div>人工智能训练师 · 理论自测
+        <small>2026 广东省人工智能与机器人技能大赛</small>
+      </div>
     </div>
+    <div class="spacer"></div>
+    <button class="top-link" data-nav="home">首页</button>
+    <button class="top-link" data-nav="wrong">错题本 <span id="navWrong"></span></button>
+    <button class="top-link" data-nav="key">答案管理</button>
+  </div>
+</header>
 
-    <script>
-        // ============================================================
-        // 全局变量
-        // ============================================================
-        let questions = [];
-        let answered = {};              // 记录每道题用户选择的选项（题号 -> 选项标签）
-        let correctCount = 0;
-        let filterType = 'all';
-        let filteredIndices = [];
-        let currentFilteredPos = 0;
-        let wrongSet = new Set();       // 存储错题的题号（用于错题本）
+<main class="wrap" id="app"></main>
+<div class="toast" id="toast"></div>
+<div id="modalRoot"></div>
 
-        // ============================================================
-        // 核心解析器
-        // ============================================================
-        function parseQuestions(text) {
-            const lines = text.split('\n');
-            const result = [];
-            let currentBlock = [];
-            let currentNum = 0;
+<!-- ============ 首页 ============ -->
+<template id="tpl-home">
+  <section class="view-enter">
+    <div class="hero">
+      <h1>理论自测 · 三套模拟卷</h1>
+      <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）考前练习</p>
+      <div class="hero-chips">
+        <span class="chip">A / B / C 三套</span>
+        <span class="chip">每套 100 题</span>
+        <span class="chip">单选 60 · 多选 10 · 判断 30</span>
+        <span class="chip">限时 90 分钟</span>
+      </div>
+      <div class="hero-actions">
+        <button class="btn btn-primary" data-act="random-exam">随机模拟考（50 题）</button>
+        <button class="btn btn-ghost" data-act="open-wrong">错题重练</button>
+      </div>
+    </div>
+    <div class="notice ok" id="notice">
+      <span>✅</span>
+      <div><b>答案已核对官方：</b>三套共 300 题的答案，均按问卷星交卷结果页逐题校准（2026-10-26），与官方判分一致。如考务组后续调整答案，可在「答案管理」中粘贴覆盖。</div>
+    </div>
+    <div class="section-title"><h2>选择试卷</h2><span>建议先做一套完整模拟，再针对性刷错题</span></div>
+    <div class="paper-grid" id="paperGrid"></div>
+    <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
+    <div class="mini-grid" id="miniGrid"></div>
+    <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
+    <div class="kpis" id="homeKpis"></div>
+  </section>
+</template>
 
-            for (let i = 0; i < lines.length; i++) {
-                let line = lines[i];
-                let trimmed = line.trim();
-                let match = trimmed.match(/^(\d+)\s*[.、）\)]\s*/);
-                if (match) {
-                    if (currentBlock.length > 0 && currentNum > 0) {
-                        let q = parseBlock(currentBlock, currentNum);
-                        if (q) result.push(q);
-                    }
-                    currentNum = parseInt(match[1]);
-                    currentBlock = [trimmed];
-                } else {
-                    if (currentNum === 0) continue;
-                    currentBlock.push(trimmed);
-                }
-            }
-            if (currentBlock.length > 0 && currentNum > 0) {
-                let q = parseBlock(currentBlock, currentNum);
-                if (q) result.push(q);
-            }
-            result.sort((a, b) => a.id - b.id);
-            return result;
+<template id="tpl-paper-card">
+  <article class="paper-card">
+    <h3><span class="dot"></span><span class="p-title"></span></h3>
+    <div class="meta">100 题 · 90 分钟 · 满分 100</div>
+    <div class="stat">
+      <div><b class="p-score">—</b><span>最高分</span></div>
+      <div class="sep"></div>
+      <div><b class="p-done">0</b><span>已答</span></div>
+    </div>
+    <div class="ops">
+      <button class="btn btn-primary" data-act="card-exam">开始考试</button>
+      <button class="btn" data-act="card-practice">练习模式</button>
+    </div>
+    <button class="btn btn-sm btn-ghost p-resume hidden" data-act="card-resume">继续上次作答</button>
+  </article>
+</template>
+
+<template id="tpl-kpi">
+  <div class="kpi"><span></span><b></b></div>
+</template>
+
+<!-- ============ 开始设置 ============ -->
+<template id="tpl-start">
+  <div class="modal-mask">
+    <div class="modal start-modal">
+      <h3></h3>
+      <p class="start-sub"></p>
+      <div class="opt-row">
+        <label>出题顺序</label>
+        <div class="seg" id="segOrder">
+          <button type="button" data-order="seq">顺序</button>
+          <button type="button" data-order="random">随机</button>
+        </div>
+      </div>
+      <div class="opt-row">
+        <label>题型</label>
+        <div class="checks" id="typeChecks">
+          <label><input type="checkbox" value="single" checked> 单选题</label>
+          <label><input type="checkbox" value="multi" checked> 多选题</label>
+          <label><input type="checkbox" value="judge" checked> 判断题</label>
+        </div>
+      </div>
+      <p class="start-warn hidden"></p>
+      <p class="start-note"></p>
+      <div class="acts">
+        <button class="btn" data-act="start-cancel">取消</button>
+        <button class="btn btn-primary" data-act="start-ok">开始</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ============ 答题 ============ -->
+<template id="tpl-quiz">
+  <section class="quiz-shell view-enter">
+    <div class="quiz-top">
+      <button class="btn btn-sm btn-ghost" data-act="exit">← 返回</button>
+      <div class="title" id="qTitle"></div>
+      <span class="tag gray" id="qModeTag"></span>
+      <button class="btn btn-sm order-btn" data-act="order-toggle" id="btnOrder" title="切换出题顺序">顺序</button>
+      <span class="qtop-spacer"></span>
+      <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
+      <div class="qtop-actions">
+        <button class="btn btn-sm drawer-btn" data-act="toggle-card">答题卡</button>
+        <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
+      </div>
+    </div>
+    <div class="quiz-body">
+      <div class="q-card">
+        <div class="q-head">
+          <span class="num" id="qNo"></span>
+          <span class="tag" id="qType"></span>
+          <span id="qHint"></span>
+          <button class="fav" data-act="fav" title="收藏本题">☆</button>
+        </div>
+        <h2 class="q-stem" id="qStem"></h2>
+        <div class="opts" id="qOpts"></div>
+        <div class="feedback hidden" id="qFeedback"></div>
+        <div class="q-foot">
+          <button class="btn btn-sm" data-act="confirm-multi" id="btnConfirmMulti">确认作答</button>
+          <button class="btn btn-sm" data-act="mark" id="btnMark">标记</button>
+          <button class="btn btn-sm" data-act="clear" id="btnClear">清空本题</button>
+          <span class="hint kbd-hint">键盘：A–D 选择 · ← → 切题</span>
+          <span class="spacer"></span>
+          <button class="btn btn-sm" data-act="prev">上一题</button>
+          <button class="btn btn-primary btn-sm" data-act="next">下一题</button>
+        </div>
+      </div>
+      <aside class="side" id="sideCard">
+        <h4>答题卡 <span id="cardProgress"></span></h4>
+        <div class="cards" id="cards"></div>
+        <div class="legend">
+          <span><i class="l1"></i>已答</span>
+          <span><i class="l2"></i>未答</span>
+          <span><i class="l3"></i>标记</span>
+        </div>
+        <div class="mini-info">
+          <div><b id="infoDone">0</b>已答</div>
+          <div><b id="infoFlag">0</b>标记</div>
+          <div><b id="infoLeft">100</b>未答</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-option">
+  <div class="opt" data-letter="">
+    <span class="letter"></span>
+    <span class="txt"></span>
+    <span class="mark"></span>
+  </div>
+</template>
+
+<template id="tpl-cell">
+  <button class="cell" data-idx=""></button>
+</template>
+
+<!-- ============ 结果 ============ -->
+<template id="tpl-result">
+  <section class="view-enter">
+    <div class="result-hero">
+      <div class="score-ring">
+        <svg viewBox="0 0 150 150" width="100%" height="100%">
+          <circle cx="75" cy="75" r="64" fill="none" stroke="#eef1f7" stroke-width="12"></circle>
+          <circle id="ring" cx="75" cy="75" r="64" fill="none" stroke="#3b5bdb" stroke-width="12"
+                  stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="402"></circle>
+        </svg>
+        <div class="val"><b id="scoreVal">0</b><span id="scoreOf">得分</span></div>
+      </div>
+      <div class="result-main">
+        <h1 id="resTitle">交卷完成</h1>
+        <div class="sub" id="resSub"></div>
+        <div class="result-actions">
+          <button class="btn btn-primary" data-act="retry">重做本卷</button>
+          <button class="btn" data-act="to-wrong">去错题本</button>
+          <button class="btn" data-act="home">返回首页</button>
+        </div>
+      </div>
+    </div>
+    <div class="kpis" id="resKpis"></div>
+    <div class="section-title">
+      <h2>逐题回顾</h2>
+      <span id="revToggle" style="cursor:pointer;color:var(--brand)">只看错题</span>
+    </div>
+    <div class="review" id="review"></div>
+  </section>
+</template>
+
+<template id="tpl-review">
+  <div class="rev-item">
+    <div class="rh"><span class="no"></span><span class="tag"></span><span class="badge-wrap"></span></div>
+    <div class="rs"></div>
+    <div class="ro ro-my"><b>你的答案：</b><span></span></div>
+    <div class="ro ro-ck"><b>参考答案：</b><span></span></div>
+  </div>
+</template>
+
+<!-- ============ 列表（错题/收藏） ============ -->
+<template id="tpl-list">
+  <section class="view-enter">
+    <div class="panel">
+      <h2 id="listTitle"></h2>
+      <p class="desc" id="listDesc"></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn btn-primary" data-act="list-practice">开始重练</button>
+        <button class="btn" data-act="list-clear">清空列表</button>
+      </div>
+      <div class="list" id="listBody"></div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-row">
+  <div class="row">
+    <span class="tag"></span>
+    <div class="grow">
+      <div class="qtext"></div>
+      <div class="qsub"></div>
+    </div>
+    <button class="btn btn-sm btn-ghost" data-act="row-go">查看</button>
+    <button class="btn btn-sm btn-ghost" data-act="row-del">移除</button>
+  </div>
+</template>
+
+<!-- ============ 学习记录 ============ -->
+<template id="tpl-history">
+  <section class="view-enter">
+    <div class="panel">
+      <h2>学习记录</h2>
+      <p class="desc" id="hisDesc"></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn btn-sm" data-act="his-export">导出记录（JSON）</button>
+        <button class="btn btn-sm" data-act="his-clear" style="color:var(--bad)">清空记录</button>
+      </div>
+      <div class="list" id="hisList"></div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-his-row">
+  <div class="row his-row">
+    <div class="his-score"><b></b><span></span></div>
+    <div class="grow">
+      <div class="qtext his-title"></div>
+      <div class="qsub his-meta"></div>
+    </div>
+    <span class="ans-badge mid his-pct"></span>
+  </div>
+</template>
+
+<!-- ============ 答案管理 ============ -->
+<template id="tpl-key">
+  <section class="view-enter">
+    <div class="panel">
+      <h2>答案管理</h2>
+      <p class="desc">
+        这里可以批量修正标准答案（例如按问卷星交卷后显示的官方答案）。格式：每行「题号 答案」，如 <b>1 D</b>、<b>12 AB</b>；
+        也支持 <b>1D</b>、<b>1、D</b> 或用逗号、分号分隔。保存后所有成绩、错题会按新答案重算。
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <select id="keyPaper">
+          <option value="A">自测卷 A</option>
+          <option value="B">自测卷 B</option>
+          <option value="C">自测卷 C</option>
+        </select>
+        <button class="btn btn-sm" data-act="key-load">载入当前答案</button>
+        <button class="btn btn-sm" data-act="key-reset">恢复默认答案</button>
+        <span class="hint" id="keyStat"></span>
+      </div>
+      <textarea id="keyText" spellcheck="false" placeholder="1 D&#10;2 B&#10;3 A"></textarea>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-primary" data-act="key-apply">保存并重新计分</button>
+        <button class="btn" data-act="key-export">导出全部答案（JSON）</button>
+        <button class="btn" data-act="key-import">导入答案（JSON）</button>
+        <button class="btn" data-act="key-reset-all" style="margin-left:auto;color:var(--bad)">重置全部进度</button>
+      </div>
+      <p class="desc" style="margin-top:16px;margin-bottom:0">
+        <b>提示：</b>「恢复默认答案」只会清除你手动修改过的题目，回到页面自带答案。
+      </p>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-modal">
+  <div class="modal-mask">
+    <div class="modal">
+      <h3></h3>
+      <p></p>
+      <div class="acts">
+        <button class="btn" data-act="modal-cancel">取消</button>
+        <button class="btn btn-primary" data-act="modal-ok">确定</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+/* 题库数据：由问卷星页面解析生成，仅含题干与选项 */
+window.QUIZ_DATA = {"papers":[{"id":"A","title":"自测卷 A","questions":[{"n":1,"t":"single","q":"在自然语言处理的数据标注中，以下哪项是常见的任务类型（）。","o":["关键词提取","文本摘要生成","语义角色标注","以上都是"]},{"n":2,"t":"single","q":"在管理培训数据处理流程时，（ ）最有助于确保数据的安全性和隐私保护。","o":["数据共享协议","加密技术和访问控制","数据备份策略","数据匿名化处理"]},{"n":3,"t":"single","q":"如果数据集中的缺失值数量非常少，以下哪种处理方法可能是合适的（）。","o":["删除含缺失值的记录","使用复杂的预测模型","不处理缺失值","增加新的数据"]},{"n":4,"t":"single","q":"混淆矩阵中的真正例（TP）指的是（）。","o":["模型预测为正且实际为正的样本数","模型预测为负且实际为负的样本数","模型预测为正但实际为负的样本数","模型预测为负但实际为正的样本数"]},{"n":5,"t":"single","q":"（）可能是最广泛、最普遍的一种数据标注类型。","o":["图像标注","数字标注","问号标注","逗号标注"]},{"n":6,"t":"single","q":"在人工智能项目中，持续迭代的主要目的是（ ）。","o":["提高系统的计算复杂度","不断改进模型性能和适应环境变化","增加训练数据量","设计更复杂的算法"]},{"n":7,"t":"single","q":"（ ）最常用于实现数据的分层抽样。","o":["随机抽样","系统抽样","按类别分层抽样","网格搜索"]},{"n":8,"t":"single","q":"在3D数据标注中，以下哪项不是标注的对象（）。","o":["3D模型重建","3D物体检测","3D场景分割","2D图像分类"]},{"n":9,"t":"single","q":"在机器学习任务中，当数据量较大（如10万条以上）时，常用的训练集、验证集和测试集的划分比例是（ ）。","o":["8:1:1","6:2:2","7:2:1","5:3:2"]},{"n":10,"t":"single","q":"在数据标注中，主标注员完成标注后，通常由谁进行质量检验（）。","o":["项目经理","数据科学家","另一位标注员","自动化系统"]},{"n":11,"t":"single","q":"对于回归模型的误差度量，下列（ ）对离群值（极端值）更敏感。","o":["MAE（平均绝对误差）","MSE（均方误差）","MAPE（平均绝对百分比误差）","R²（决定系数）"]},{"n":12,"t":"single","q":"可视化的输入是（）。","o":["数据","语言","代码","视觉形式"]},{"n":13,"t":"single","q":"在进行优化成效验证时，（ ）指标最能反映模型在实际应用中的表现。","o":["训练误差","测试准确率","精度与召回率","收敛速度"]},{"n":14,"t":"single","q":"在算法模型测试中，召回率（Recall）通常用来衡量什么（）。","o":["模型预测为正类的样本中，实际为正类的比例","所有实际为正类的样本中，模型预测为正类的比例","模型预测为负类的样本中，实际为负类的比例","所有实际为负类的样本中，模型预测为负类的比例"]},{"n":15,"t":"single","q":"根据数据源的数量以及缺失、不一致或者冗余情况，决定（）和清洗步骤。","o":["数据转换","数据查看","数据查阅","数据观察"]},{"n":16,"t":"single","q":"数据分析中，主成分分析（PCA）主要用于（）。","o":["数据压缩","数据去重","数据加密","数据备份"]},{"n":17,"t":"single","q":"如果对某一参数构建了95%的置信区间，那么该解释通常是（ ）。","o":["真值有95%的概率落在这个区间内","如果重复无数次相同实验，每次计算区间，其中约95%的此类区间将包含真值","样本均值有95%的概率出现在区间内","区间两端点都有95%的概率为正确值"]},{"n":18,"t":"single","q":"数据采集质量直接影响到数据的哪个方面（）。","o":["可用性","处理速度","存储成本","数据类型"]},{"n":19,"t":"single","q":"职工道德修养对个人职业生涯的影响主要体现在（）。","o":["增加跳槽机会","减少工作满意度","提升职业形象","降低工作效率"]},{"n":20,"t":"single","q":"关于语音技术，下面不正确的说法是（)。","o":["语音合成是将文字信息转变为语音效据","语音技术就是多媒体技术","语音技术中的关键是语音识别和语音合成","语音识别是使计算机能识别人说的话"]},{"n":21,"t":"single","q":"数据标注规则的指定主要是为了实现什么目标（）。","o":["提高标注效率","确保标注结果的一致性和准确性","减少数据集的大小","增加标注人员的自由裁量权"]},{"n":22,"t":"single","q":"数据标注质量检验的首要目的是（）。","o":["提高标注速度","降低标注成本","确保标注准确性","提升标注工具性能"]},{"n":23,"t":"single","q":"在设计人工智能业务模块时，（ ）是首要任务。","o":["数据预处理","模型选择","系统部署","需求分析"]},{"n":24,"t":"single","q":"在深度学习中，批量归一化（Batch Normalization）的主要作用是什么（）。","o":["减少模型的过拟合","加速模型的收敛","减少模型的泛化能力","增加模型的复杂度"]},{"n":25,"t":"single","q":"在机器学习模型的参数调优过程中，最常用的调优方法是（ ）。","o":["网格搜索","随机搜索","梯度下降","正则化"]},{"n":26,"t":"single","q":"数据清洗中，数据类型转换通常是为了（）。","o":["增加数据的复杂性","减少数据的一致性","提高数据的兼容性","降低数据的准确性"]},{"n":27,"t":"single","q":"在降维中，t-SNE最适合处理（ ）。","o":["线性可分的数据","非线性高维数据的可视化","二维结构数据","时间序列数据"]},{"n":28,"t":"single","q":"在Internet中，用字符串表示的IP地址称为（）。","o":["账户","域名","主机名","用户名"]},{"n":29,"t":"single","q":"在特征选择中，使用主成分分析（PCA）的主要目的是什么（）。","o":["降维","去噪","特征编码","特征选择"]},{"n":30,"t":"single","q":"在数据去重中，如果数据集中的记录部分信息相同，以下哪种方法可能更有效（）。","o":["基于哈希的方法","基于规则的方法","基于聚类的方法","基于排序的方法"]},{"n":31,"t":"single","q":"算法优化的主要目标是提高算法的（）。","o":["可读性","可扩展性","执行效率","用户交互性"]},{"n":32,"t":"single","q":"在进行数据采集系统的日常维护时，以下哪项操作是不必要的（）。","o":["检查数据采集硬件的连接状态","更新数据采集软件的版本","定期清理存储设备上的数据","重新启动数据采集系统"]},{"n":33,"t":"single","q":"如果数据集中的缺失值分布是随机的，以下哪种处理方法可能是合适的（）。","o":["删除所有缺失值","用列的均值填充数值型数据","删除含有缺失值的整个特征","用其他变量预测缺失值"]},{"n":34,"t":"single","q":"词袋模型在文本处理中主要用来做什么（）。","o":["将文本转换为词频向量","识别文本中的关键词","计算文档之间的相似度","进行文本的情感分析"]},{"n":35,"t":"single","q":"在混合模式标注项目中，以下哪项措施最有助于减少人工标注员的重复劳动（）。","o":["提高标注员的培训频率","增加标注项目的预算","引入自动化预标注工具","扩大标注团队的规模"]},{"n":36,"t":"single","q":"数据标注员需要遵循的工作原则不包括（）。","o":["理解任务要求","保持主观性","统一标准规范","保护数据隐私"]},{"n":37,"t":"single","q":"（）是指将聚类结果与外部某个参考模型进行比较。","o":["外部指标","图像指标","语音指标","文本指标"]},{"n":38,"t":"single","q":"在数据分析中，相关性分析用于（）。","o":["评估变量之间的因果关系","确定变量的类型","预测数据点的值","计算数据的分布"]},{"n":39,"t":"single","q":"在机器学习中，使用K折交叉验证的主要目的是什么（）。","o":["增加数据集的大小","减少模型的方差","提高模型的准确度","减少计算时间"]},{"n":40,"t":"single","q":"在团队管理中，以下哪项措施最能有效激发团队成员的积极性和忠诚度（）。","o":["仅在团队达成重大里程碑时给予奖励","忽视团队成员的个人职业发展需求","定期组织团队建设活动，增强团队精神","只关注任务完成，不关心团队成员的个人感受"]},{"n":41,"t":"single","q":"在数据预处理中，处理缺失值的一种常见方法是（）。","o":["删除含有缺失值的行或列","用固定值填充所有缺失值","用统计值（如均值、中位数）填充","忽略缺失值"]},{"n":42,"t":"single","q":"语音识别系统的模型通常由（）和语言模型两部分组成。","o":["声学模型","声纹模型","声调模型","声色模型"]},{"n":43,"t":"single","q":"在培训数据处理流程中，（ ）是确保数据准确性和一致性的关键步骤。","o":["数据清洗","数据输入","数据存储","数据分析"]},{"n":44,"t":"single","q":"在分类问题中，查准率（查全率）和查全率（召回率）之间通常存在什么关系?","o":["它们是相同的指标","它们是互斥的指标","它们之间存在权衡关系","它们之间没有关系"]},{"n":45,"t":"single","q":"在数据分析领域，主成分分析（PCA）技术通常用于实现以下哪个目标（）。","o":["识别数据集中的异常值","通过正则化方法提高模型的泛化能力","降低数据的维度同时保留关键信息","构建分类器以提高分类精度"]},{"n":46,"t":"single","q":"在算法模型测试中，K折交叉验证通常用于（）。","o":["快速评估模型性能","减少数据使用量","增加模型复杂度","减少计算资源消耗"]},{"n":47,"t":"single","q":"特征选择中的包装方法通常依赖于什么（）。","o":["数据集的大小","模型的性能","特征的数量","特征的类型"]},{"n":48,"t":"single","q":"以下哪个领域不会对人机交互学科产生影响（）。","o":["计算机科学","人因功效学","认知心理学","上述学科均对人机交互学科有影响"]},{"n":49,"t":"single","q":"可视化的输出是（）。","o":["数据","代码","视觉形式","语言"]},{"n":50,"t":"single","q":"数据清洗的主要目的是什么（）。","o":["增加数据量","提高数据质量","减少存储空间","降低处理速度"]},{"n":51,"t":"single","q":"文本标注中的词性标注是指（）。","o":["标注文本中每个词的语法类别","标注文本中每个词的语义","标注文本中每个词的发音","标注文本中每个词的词性"]},{"n":52,"t":"single","q":"在MicrosoftExcel中，（ ）可以快速统计某列的总和。","o":["数据透视表","筛选","自动求和","插入图表"]},{"n":53,"t":"single","q":"在AI数据处理流程中，数据提取组件的主要作用是什么?","o":["清洗数据","转换数据格式","从源系统中提取数据","加载数据到目标系统"]},{"n":54,"t":"single","q":"在机器学习中，标注数据的主要作用不包括以下哪项（）。","o":["提供模型训练的目标","加速模型的训练过程","限制模型的应用场景","增强模型的预测能力"]},{"n":55,"t":"single","q":"在算法测试中，交叉验证的主要作用是（）。","o":["减少计算成本","提高算法泛化能力","增加训练数据","减少过拟合风险"]},{"n":56,"t":"single","q":"在视频标注中，关键帧标注的主要作用是（）。","o":["减少存储空间","提高视频理解的准确性","降低视频播放速度","增加视频的分辨率"]},{"n":57,"t":"single","q":"数据采集，又称（），是利用一种装置，从系统外部采集数据并输入到系统内部的一个接口。","o":["数据收集","数据搜集","数据获取","数据汇集"]},{"n":58,"t":"single","q":"业务流程优化中，以下哪项不是衡量流程改进效果的关键指标（）。","o":["流程周期时间","客户投诉率","员工满意度","流程设计美观度"]},{"n":59,"t":"single","q":"在AI数据处理流程中，“数据提取”阶段的主要任务是什么?","o":["清洗数据","转换数据格式","从源系统中提取数据","加载数据到目标数据库"]},{"n":60,"t":"single","q":"在可行性验证的初始阶段，通常应先进行（ ）。","o":["大规模上线部署","立即投入全量生产环境","简单的概念验证（ProofofConcept）或小规模试点测试","无需验证，直接信任方案设计"]},{"n":61,"t":"multi","q":"在大数据采集中，以下哪些措施可以提高数据质量（）。","o":["使用数据校验机制","限制数据来源","实施数据监控","定期进行数据审核"]},{"n":62,"t":"multi","q":"在数据标注质量检验领域，以下哪些方法可以用于评估标注的质量（）。","o":["交叉验证","一致性检验","错误率分析","标注结果的统计分析"]},{"n":63,"t":"multi","q":"以下哪些措施有助于提高数据标注规则的执行效率（）。","o":["提供详细的规则说明","进行规则培训","实施规则审核机制","增加标注任务的报酬"]},{"n":64,"t":"multi","q":"在指定数据标注规则时，以下哪些因素是重要的（）。","o":["确保规则的可理解性","规则应覆盖所有可能的数据情况","规则应具有一定的灵活性","规则应简洁明了，避免冗长"]},{"n":65,"t":"multi","q":"在数据预处理中，以下哪些技术是常用的（）。","o":["数据归一化","数据标准化","特征选择","数据丢失"]},{"n":66,"t":"multi","q":"数据变换可以包括以下哪些方法?","o":["标准化","对数变换","离散化","主成分分析"]},{"n":67,"t":"multi","q":"对于需要模型在特征空间中直接度量样本间相似度或距离的任务（如度量学习和人脸识别），下列（ ）损失函数往往更适合。","o":["HingeLoss","TripletLoss","ContrastiveLoss","L2Loss（MSE）"]},{"n":68,"t":"multi","q":"为了确保数据采集的完整性，可以采取以下哪些措施（）。","o":["增加数据采集点","实施数据采集监控","使用自动化采集系统","减少人为干预"]},{"n":69,"t":"multi","q":"数据采集过程中的异常处理包括哪些方面（）。","o":["识别异常数据","记录异常情况","采取纠正措施","忽略异常数据"]},{"n":70,"t":"multi","q":"划分数据集时，以下（ ）因素需要考虑。","o":["数据量的大小","数据分布的平衡性","模型的复杂度","硬件的计算能力"]},{"n":71,"t":"judge","q":"数据清洗内容包括缺失值处理、异常值处理、去重处理和噪音数据处理。","o":["对","错"]},{"n":72,"t":"judge","q":"在大数据环境下，使用列式存储可以提高查询性能，特别是在处理大型分析查询时。","o":["对","错"]},{"n":73,"t":"judge","q":"在高并发压力测试中，如果请求数增加导致响应时间显著上升并出现超时，说明系统存在性能瓶颈，需要进行优化。","o":["对","错"]},{"n":74,"t":"judge","q":"大数据技术可以实时处理数据流","o":["对","错"]},{"n":75,"t":"judge","q":"数据录入过程、数据整合过程都可能会产生重复数据，直接删除是重复数据处理的主要方法。","o":["对","错"]},{"n":76,"t":"judge","q":"语音标注规则可以根据标注员的个人习惯灵活调整。","o":["对","错"]},{"n":77,"t":"judge","q":"可以通过映射与化简的方式达到去重的目的。","o":["对","错"]},{"n":78,"t":"judge","q":"语音中只有“嗯”“啊”“呃”的无实际语义的语气词属于有效语音。","o":["对","错"]},{"n":79,"t":"judge","q":"在AI数据处理架构中，数据存储库是数据的最终存储地，不参与数据转换过程。","o":["对","错"]},{"n":80,"t":"judge","q":"所有数据标注任务都可以使用同一种文件格式进行存储和表示。","o":["对","错"]},{"n":81,"t":"judge","q":"基于ETL的数据清洗是挖掘有价值数据的一种方案。","o":["对","错"]},{"n":82,"t":"judge","q":"忽略该记录是缺失值处理方法。","o":["对","错"]},{"n":83,"t":"judge","q":"数据清洗时，对于缺失值的处理，简单的删除含有缺失值的记录通常不是最佳做法。","o":["对","错"]},{"n":84,"t":"judge","q":"对于任何算法，优化其时间复杂度一定会增加其空间复杂度。","o":["对","错"]},{"n":85,"t":"judge","q":"算法改进后，性能评估报告应包括运行效率和资源消耗的对比。","o":["对","错"]},{"n":86,"t":"judge","q":"机器学习模型在作为标注者时，不需要任何形式的监督或验证。","o":["对","错"]},{"n":87,"t":"judge","q":"可视化可用于支持可视化计算。","o":["对","错"]},{"n":88,"t":"judge","q":"数据去重后，数据集中的记录数量一定会减少。","o":["对","错"]},{"n":89,"t":"judge","q":"内存容量越大，计算机性能一定越好。","o":["对","错"]},{"n":90,"t":"judge","q":"算法的时间复杂度和实际运行时间是相同的概念。","o":["对","错"]},{"n":91,"t":"judge","q":"算法的准确性可以通过单一的测试案例来全面评估。","o":["对","错"]},{"n":92,"t":"judge","q":"对于所有算法，最好情况复杂度都比最坏情况复杂度更有用。","o":["对","错"]},{"n":93,"t":"judge","q":"工匠精神强调的是对工作成果的完美追求，不包括创新和改进。","o":["对","错"]},{"n":94,"t":"judge","q":"数据标注规则的制定需要考虑标注者的理解能力。","o":["对","错"]},{"n":95,"t":"judge","q":"在数据标注流程中，标注工具的选择对标注效率和质量有重要影响（）。","o":["对","错"]},{"n":96,"t":"judge","q":"在数据标注用于监督学习时，标注数据的质量是对模型训练结果有影响的。","o":["对","错"]},{"n":97,"t":"judge","q":"数据挖掘是逻辑回归的应用领域之一。","o":["对","错"]},{"n":98,"t":"judge","q":"数据增强技术在视觉类业务数据处理中有助于提高模型的泛化能力。","o":["对","错"]},{"n":99,"t":"judge","q":"文本标注质量规范的目的是确保数据标注的一致性和可用性。","o":["对","错"]},{"n":100,"t":"judge","q":"在多标签标注中，同一个数据点只能被分配一个标签","o":["对","错"]}]},{"id":"B","title":"自测卷 B","questions":[{"n":1,"t":"single","q":"校正数据偏差时，常用的加权方法是（ ）。","o":["为少数类样本分配更高的权重","为多数类样本分配更高的权重","随机分配权重","按特征值大小分配权重"]},{"n":2,"t":"single","q":"在算法设计中，动态规划相对于贪心算法的优势在于（）。","o":["更快的执行速度","更少的内存使用","能够解决更广泛的问题","更高的算法复杂度"]},{"n":3,"t":"single","q":"在视频数据标注中，物体识别的主要步骤不包括以下哪一项（）。","o":["绘制边界框","视频剪辑","物体跟踪","属性标注"]},{"n":4,"t":"single","q":"（）是一种降低复杂度的数据分析手段。","o":["文本分析","模式分析","自然语言处理","数据特征降维"]},{"n":5,"t":"single","q":"以下哪个是大数据分析中用于描述数据分布特征的统计量?","o":["平均值","中位数","众数","所有选项"]},{"n":6,"t":"single","q":"在随机森林算法中，随机性主要体现在哪些方面（）。","o":["随机选择特征进行分裂","随机选择训练数据","随机初始化模型参数","随机选择模型的输出"]},{"n":7,"t":"single","q":"以下哪个方法不是数据的无量纲化技术?","o":["标准化（Z-score normalization）","最大最小规范化（Min-Max scaling）","归一化（Normalization）","离群值剔除"]},{"n":8,"t":"single","q":"算法异常定位的第一步通常是（ ）。","o":["检查硬件是否运行正常","分析日志输出","重新设计算法","修改超参数"]},{"n":9,"t":"single","q":"下列表述中，最能说明系统误差小的是（）。","o":["高精密度","与已知的质量分数的试样多次分析结果的平均值一致","标准差大","仔细校正所用砝码和容量仪器等"]},{"n":10,"t":"single","q":"人机交互方式多种多样，比如（）等，都是未来智能交互技术发展的方向。","o":["体感识别","图像识别","手势识别","以上均正确"]},{"n":11,"t":"single","q":"算法分析中，对数的底数对对数时间复杂度的影响是（）。","o":["非常大","非常小","可以忽略不计","决定性的"]},{"n":12,"t":"single","q":"在支持向量机（SVM）中，核函数的作用是什么（）。","o":["增加模型的复杂度","将数据映射到更高维的空间","减少模型的训练时间","限制模型的泛化能力"]},{"n":13,"t":"single","q":"图像用户界面设计中，（ ）符合“简洁性”原则。","o":["在主界面显示所有高级选项","仅呈现用户当前任务相关的必要信息","使用复杂的图标和装饰","将多级菜单嵌套在子菜单中"]},{"n":14,"t":"single","q":"AI数据管道中，将数据进行格式转换、特征提取等，使其适合模型训练的阶段指的是什么。","o":["传输（Transfer）","转换（Transform）","加载（Load）","测试（Test）"]},{"n":15,"t":"single","q":"分层抽样的主要目的是（ ）。","o":["减少样本数量","确保每一类在样本中按比例存在","提高采样速度","提高数据的随机性"]},{"n":16,"t":"single","q":"在算法测试中，测试结果的分析通常不包括（）。","o":["模型的性能指标","模型的预测能力","模型的可解释性","模型的市场占有率"]},{"n":17,"t":"single","q":"在大数据处理中，MapReduce是一种广泛使用的编程模型，其主要思想是（）。","o":["将数据划分为多个小块并行处理","只使用单个处理器进行数据处理","将所有数据存储在单一数据库中","通过多级索引来加速查询速度"]},{"n":18,"t":"single","q":"下列使用了语音识别技术的是（）。","o":["通过语音输入录入文本","用“录言机”软件录制产音","与国外的朋友电话聊天","按导航仪的语音提示驾驶汽车"]},{"n":19,"t":"single","q":"常见的数据标注工具的数据标注结果导出格式不包括（）。","o":["CSV","XML","JSON","MP4"]},{"n":20,"t":"single","q":"优化方案试运行能够（）。","o":["投入较多资金运作","以高成本试错","吸引大量人员参与","以低成本试错"]},{"n":21,"t":"single","q":"语音识别的技术框架中不包括（）。","o":["模型训练","编码","前端语音处理","后端识别处理"]},{"n":22,"t":"single","q":"在分类任务中，标签的存在形式通常是（ ）。","o":["已知的类别标签","通过距离计算自动生成","需要通过无监督学习推断","由聚类结果间接决定"]},{"n":23,"t":"single","q":"语音识别系统的主要挑战之一是（ ）。","o":["低功耗设计","语音的歧义性和多样性","实时处理能力","语音合成的速度"]},{"n":24,"t":"single","q":"数据脱敏技术的主要目的是（ ）。","o":["隐藏敏感数据","加快数据处理速度","优化数据库查询性能","提高人工智能模型的准确性"]},{"n":25,"t":"single","q":"数据分析中，数据清洗的主要目的是（）。","o":["增加数据量","提高数据质量","减少计算资源","降低模型复杂度"]},{"n":26,"t":"single","q":"（）是深度学习中的一个重要的超参。","o":["学习率","年化率","年利率","利用率"]},{"n":27,"t":"single","q":"在大数据采集中，以下哪项不是主要的数据存储格式","o":["CSV文件","JSON文件","XML文件","纸质记录"]},{"n":28,"t":"single","q":"朴素贝叶斯算法属于（）。","o":["有监督学习","强化学习","半监督学习","无监督学习"]},{"n":29,"t":"single","q":"数据中的噪声通常指的是什么（）。","o":["数据中的有用信息","数据中的随机误差或异常值","数据中的缺失值","数据中的重复记录"]},{"n":30,"t":"single","q":"IE浏览器中“收藏夹”菜单的作用是（）。","o":["收藏当前网页的网址信息","收藏当前网页上选中的内容信息","收藏当前网页中的图片信息","收藏当前的网页中的视频信息"]},{"n":31,"t":"single","q":"算法复杂性分析中，阿姆达尔定律（Amdahl's Law）主要用于评估（）。","o":["并行计算中程序加速比的上限","算法的空间复杂度","算法的最好情况时间复杂度","算法的内存使用效率"]},{"n":32,"t":"single","q":"下面哪种交互方式最接近人的自然交流形式（）。","o":["遥控板调节空调温度","语音输入文字","键盘输入","用摇杆操控机器人"]},{"n":33,"t":"single","q":"工匠精神的核心是什么（）。","o":["快速完成任务","追求短期利益","精益求精，追求卓越","只关注个人技能提升"]},{"n":34,"t":"single","q":"计算机病毒破坏的主要对象是（）。","o":["磁盘片","磁盘驱动器","CPU","程序和数据"]},{"n":35,"t":"single","q":"在特征选择领域，以下哪种方法不是用来减少特征数量的（）。","o":["前向选择","后向消除","正则化方法","数据标准化"]},{"n":36,"t":"single","q":"在为数据集命名时，（ ）原则最为重要。","o":["使用随机字符组合","保持命名简短但具有描述性","优先采用主观创意命名法","尽可能避免使用版本号"]},{"n":37,"t":"single","q":"正态分布是以（）。","o":["均数为中心的频数分布","t值为中心的频数分布","参数为中心的频数分布","变量为中心的频数分布"]},{"n":38,"t":"single","q":"在算法模型测试中，精确率（Precision）通常用来衡量什么（）。","o":["模型预测为正类的样本中，实际为正类的比例","模型预测为负类的样本中，实际为负类的比例","所有样本中，模型预测为正类的比例","所有样本中，模型预测为负类的比例"]},{"n":39,"t":"single","q":"在进行语音标注时，可以借助（）的语音转文本工具。","o":["科大讯飞","百度视频","腾讯视频","爱剪辑"]},{"n":40,"t":"single","q":"XML格式在数据标注中的主要优势是（）。","o":["轻量级和易于阅读","高度的表达能力","对数学公式的良好支持","广泛的软件支持"]},{"n":41,"t":"single","q":"（）是指为了得到一致假设而使假设变得过度严格。","o":["过拟合","数据观察","数据查看","数据查阅"]},{"n":42,"t":"single","q":"多元线性回归中的“线性”是指什么是线性（）。","o":["系数","自变量","因变量","误差"]},{"n":43,"t":"single","q":"（）就是用类似漏斗的框架对事物进行分析的方法。","o":["对比分析法","分组分析法","预测分析法","漏斗分析法"]},{"n":44,"t":"single","q":"以下哪个不是AI数据预处理工具的主要功能?","o":["数据抽取","数据备份","数据转换","数据加载"]},{"n":45,"t":"single","q":"在数据标注团队中，以下哪个角色最可能负责标注数据的安全性和隐私保护（）。","o":["项目经理","数据爬虫的IT人员","质量控制专员","数据分析师"]},{"n":46,"t":"single","q":"在处理缺失值时，哪种方法通常被认为是最简单且常用的（）。","o":["使用均值填充缺失值","使用回归模型预测缺失值","删除含有缺失值的行","使用K近邻算法填充缺失值"]},{"n":47,"t":"single","q":"对于业务流程设计说法正确的是（）","o":["对重点业务调查即可","关注重要产品即可","企业流程设计需要对企业充分调查","不要太多的协商讨论"]},{"n":48,"t":"single","q":"在二分类问题中，ROC曲线的横轴表示（）。","o":["真正率","假正率","召回率","精确率"]},{"n":49,"t":"single","q":"在算法分析中，最好情况时间复杂度是指（）。","o":["平均情况下的时间复杂度","最坏情况下的时间复杂度","可能情况下的最小时间复杂度","以上都不正确"]},{"n":50,"t":"single","q":"以下叙述中正确的是（）。","o":["数据库技术的根本目标是要解决数据共享的问题","数据库不需要操作系统的支持","数据库设计是指设计数据库管理系统","数据库系统中，数据的物理结构必须与逻辑结构一致"]},{"n":51,"t":"single","q":"在算法测试中，留出法（Holdout method）通常用于（）。","o":["评估模型的泛化能力","选择最优的模型参数","增加模型训练的数据量","减少模型训练的时间"]},{"n":52,"t":"single","q":"对于大规模图像数据的存储和标注，哪种文件格式因其高效的压缩算法而更受欢迎（）。","o":["JSON","CSV","PNG","HDF5"]},{"n":53,"t":"single","q":"以下哪个不是大数据处理技术的特点（）。","o":["高效性","容错性","单一性","可扩展性"]},{"n":54,"t":"single","q":"在基于聚类的数据去重中，以下哪种聚类算法通常对球形数据簇效果较好（）。","o":["K - Means 算法","DBSCAN 算法","层次聚类算法","高斯混合模型聚类算法"]},{"n":55,"t":"single","q":"在数据标注中，若要标注图像中所有可识别的对象，应使用哪种类型的标注（）。","o":["分类标注","实体标注","关系标注","场景标注"]},{"n":56,"t":"single","q":"特征构造不包括以下哪项活动（）。","o":["从原始数据中提取有用的信息","创建新的特征以捕捉数据中的模式","删除与目标变量无关的特征","直接使用未经处理的原始数据进行模型训练"]},{"n":57,"t":"single","q":"文本数据标注中的命名实体识别属于哪种类型的标注（）。","o":["分类标注","实体标注","属性标注","关系标注"]},{"n":58,"t":"single","q":"训练模型最终的目的是将训练好的模型部署到（）中。","o":["实验环境","理论环节","现实环境","任意环境"]},{"n":59,"t":"single","q":"在数据分析中，数据的分辨率是指（）。","o":["数据的存储容量大小","数据的采集频率","数据的精确度和详细程度","数据的可视化效果"]},{"n":60,"t":"single","q":"局域网的协议结构—般不包括（）。","o":["网络层","物理层","数据链路层","介质访问控制层"]},{"n":61,"t":"multi","q":"在大数据技术中，以下哪些是用于提高数据处理效率的技术","o":["数据分区","内存计算","多线程处理","云计算资源动态扩展"]},{"n":62,"t":"multi","q":"根据表现形式，用户界面包括（）。","o":["命令行界面","图形界面","自然用户界面","自适应界面"]},{"n":63,"t":"multi","q":"以下哪些是标注过程中可能考虑的标注属性（）。","o":["位置信息","大小信息","颜色信息","纹理信息"]},{"n":64,"t":"multi","q":"企业在培养员工职业道德时，应注重哪些方面（）。","o":["遵守法律法规","追求个人利益最大化","诚实守信","团队合作"]},{"n":65,"t":"multi","q":"在机器学习中，以下哪些因素可能影响模型的泛化能力（）。","o":["训练数据的多样性","模型的过拟合","模型的欠拟合","模型的复杂度"]},{"n":66,"t":"multi","q":"以下（ ）会导致语音类业务数据出现失真。","o":["设备故障","网络拥塞","强磁场干扰","语音编码算法缺陷"]},{"n":67,"t":"multi","q":"在数据标注项目中，以下哪些措施是确保标注质量的关键控制方法（）。","o":["制定和遵循详细的标注指南","对标注员进行定期的技能培训和测试","实施标注结果的随机抽样和全面审核","采用自动化工具辅助检测标注错误"]},{"n":68,"t":"multi","q":"以下哪些因素会影响算法测试结果的准确性（）。","o":["测试数据的质量","测试用例的覆盖率","算法的实现细节","测试执行的随机性"]},{"n":69,"t":"multi","q":"算法复杂性常用（）进行分析。","o":["数据集","资源大小","空间复杂度","时间复杂度"]},{"n":70,"t":"multi","q":"视觉类数据标注规则应包括以下（ ）。","o":["标注工具的使用说明","标签类别定义清晰","忽略数据分布的均衡性","处理模糊或遮挡目标的规则"]},{"n":71,"t":"judge","q":"语音识别系统只能用于短语音命令的识别，无法处理长时间的对话。","o":["对","错"]},{"n":72,"t":"judge","q":"在模型训练中，早停法是一种有效的策略，可以防止模型在训练集上过度优化。","o":["对","错"]},{"n":73,"t":"judge","q":"受极端变量值影响的集中趋势的度量指标是分位数和算术平均数。","o":["对","错"]},{"n":74,"t":"judge","q":"业务流程优化的成功完全依赖于技术的应用，与员工的接受度无关","o":["对","错"]},{"n":75,"t":"judge","q":"在混合模式标注项目中，引入自动化工具总是可以提高标注效率。","o":["对","错"]},{"n":76,"t":"judge","q":"当数据受到噪声影响时，最小的特征值所对应的特征向量往往与噪声有关，舍弃能在一定程度上起到降噪的效果，这是PCA算法的优点。","o":["对","错"]},{"n":77,"t":"judge","q":"在模型调优时，选择不同的评价指标（如精度、召回率、F1-score）可以帮助更好地理解模型的表现，尤其是在数据不平衡的情况下。","o":["对","错"]},{"n":78,"t":"judge","q":"算法正确性是算法设计最基本且最重要的要求。","o":["对","错"]},{"n":79,"t":"judge","q":"在数据标注项目中，项目经理的角色仅限于管理预算，不涉及标注过程的监督。","o":["对","错"]},{"n":80,"t":"judge","q":"数据标注的目的仅仅是为了训练机器学习模型，对模型的部署和应用阶段没有影响。","o":["对","错"]},{"n":81,"t":"judge","q":"Pytorch、TensorFlow和飞桨PaddlePaddle都是深度学习框架。","o":["对","错"]},{"n":82,"t":"judge","q":"神经网络通常由输入层、隐藏层、输出层和损失层四部分组成。","o":["对","错"]},{"n":83,"t":"judge","q":"算法的最好情况时间复杂度总是比最坏情况时间复杂度更有指导意义。","o":["对","错"]},{"n":84,"t":"judge","q":"特征选择只适用于监督学习。","o":["对","错"]},{"n":85,"t":"judge","q":"分箱方法是一种简单常用的预处理方法，通过考察相邻数据来确定最终值。","o":["对","错"]},{"n":86,"t":"judge","q":"数据标注只对机器学习模型的训练阶段重要。","o":["对","错"]},{"n":87,"t":"judge","q":"大数据处理中的数据清洗是可选的，对数据分析结果没有影响。","o":["对","错"]},{"n":88,"t":"judge","q":"在算法设计中，总是应该优先考虑时间复杂度而非空间复杂度。","o":["对","错"]},{"n":89,"t":"judge","q":"特征选择的主要目的是减少模型的复杂性，提高模型的性能和可解释性。","o":["对","错"]},{"n":90,"t":"judge","q":"缺失值一般由NA表示。","o":["对","错"]},{"n":91,"t":"judge","q":"重复数据检测主要分为基于字段和基于记录的重复检测。","o":["对","错"]},{"n":92,"t":"judge","q":"数据分析的主要目的是通过挖掘数据中的模式和关联，来预测未来的趋势","o":["对","错"]},{"n":93,"t":"judge","q":"数据清洗的目的是为了提高数据的准确性和可用性。","o":["对","错"]},{"n":94,"t":"judge","q":"企业在追求利润的同时，可以忽视职业道德的建设。","o":["对","错"]},{"n":95,"t":"judge","q":"数据标注质量检验的方法包括实时检验、抽样检验、全样检验。","o":["对","错"]},{"n":96,"t":"judge","q":"多重抽样检验的缺点则是该方法只能用于辅助其他检验方法。","o":["对","错"]},{"n":97,"t":"judge","q":"标注的精确度对模型训练的效果没有影响","o":["对","错"]},{"n":98,"t":"judge","q":"动态规划算法总是比贪心算法得到的结果更优。","o":["对","错"]},{"n":99,"t":"judge","q":"人机交互系统的成功设计只需注重视觉设计，不需考虑用户的操作习惯。","o":["对","错"]},{"n":100,"t":"judge","q":"常见的数据可视化图表类型有柱形图、条形图、饼图和折线图。","o":["对","错"]}]},{"id":"C","title":"自测卷 C","questions":[{"n":1,"t":"single","q":"在算法优化中，算法的剪枝操作主要用于（）。","o":["提高算法的内存使用","减少算法的分支数量","增加算法的计算量","提高算法的可读性"]},{"n":2,"t":"single","q":"（）是增强企业凝聚力的手段。","o":["职业道德","企业环境","企业礼俗","企业作风"]},{"n":3,"t":"single","q":"在大数据处理中，以下哪项技术主要用于处理和分析大规模数据集（）。","o":["关系型数据库","分布式计算框架","客户关系管理（CRM）系统","传统桌面操作系统"]},{"n":4,"t":"single","q":"（ ）能够通过内置或插件方式实现数据清洗与标注任务的无缝衔接。","o":["Labelbox","DataWrangler","NumPy","TensorFlow"]},{"n":5,"t":"single","q":"对数变换通常用于处理数据的什么特性?","o":["线性关系","非线性关系","正态分布","均匀分布"]},{"n":6,"t":"single","q":"（ ）可用于检测并清洗重复的视觉数据。","o":["使用哈希算法比较图像","手动对比图像内容","提高采样率","删除所有相似图片"]},{"n":7,"t":"single","q":"数据清洗中，以下哪项不是常见的数据错误类型（）。","o":["重复数据","缺失数据","异常数据","过时数据"]},{"n":8,"t":"single","q":"数据采集的准确性是指什么（）。","o":["采集数据的速度","采集数据的完整性","采集数据的一致性","采集数据与真实值的接近程度"]},{"n":9,"t":"single","q":"对于含有大量缺失值的数据集，（ ）的方法最常用于填补缺失数据。","o":["用均值或中位数填充","删除所有含有缺失值的行","用零填充","用最近邻填充"]},{"n":10,"t":"single","q":"工匠要打造一流的产品就要对自己的工作有高度的（）。","o":["热心","生疏","重视","责任心"]},{"n":11,"t":"single","q":"以下哪项不是大数据的特点（）。","o":["高速度","高容量","多样性","低价值"]},{"n":12,"t":"single","q":"在数据标注中，使用XML格式相较于其他格式的主要缺点是（）。","o":["易于阅读和编写","支持复杂的数据结构","文件大小相对较大","学习曲线平缓"]},{"n":13,"t":"single","q":"以下哪类标注者可能需要更多的培训和指导（）。","o":["经验丰富的标注者","业余标注者","专业标注者","机器学习模型"]},{"n":14,"t":"single","q":"在大数据处理的过程中，以下哪种技术主要用于实时数据流的处理（）。","o":["Hadoop MapReduce","Apache Spark Streaming","关系型数据库","数据仓库"]},{"n":15,"t":"single","q":"（）是指利用训练好的声学模型和语言模型对提取到的特征向量进行识别，得到文字信息的过程。","o":["模型训练","编码","前端语音处理","后端识别处理"]},{"n":16,"t":"single","q":"《计算机软件保护条例》是保护软件的（）。","o":["著作权","复制权","发行权","使用权"]},{"n":17,"t":"single","q":"在算法复杂性分析中，旅行商问题（TSP）的一般解法的时间复杂度是（）。","o":["O(N^2)","O(2^N)","O(N!)","O(N log N)"]},{"n":18,"t":"single","q":"职工道德修养的核心是什么（）。","o":["遵守法律法规","诚实守信","追求个人利益","团队合作"]},{"n":19,"t":"single","q":"特征工程的主要目的是（ ）。","o":["简化代码编写流程","优化模型超参数选择","将原始数据转换为更有利于模型学习的特征，提高模型性能","单纯减少数据量以提高训练速度"]},{"n":20,"t":"single","q":"数据分析与处理方法主要分为（）个部分。","o":["2","3","4","5"]},{"n":21,"t":"single","q":"在业务流程优化中，以下哪个因素不是关键成功因素（）。","o":["员工参与度","管理层支持","使用过时的技术","客户反馈"]},{"n":22,"t":"single","q":"完善优化方案需要确保（）。","o":["所有人满意","大部分人满意","领导满意","少数人满意"]},{"n":23,"t":"single","q":"在算法模型测试中，召回率是指（）。","o":["模型预测为正的样本占所有实际正样本的比例","模型预测为负的样本占所有实际负样本的比例","模型预测正确的样本占所有样本的比例","模型预测错误的样本占所有样本的比例"]},{"n":24,"t":"single","q":"算法复杂性分析中，归并排序的最坏情况下时间复杂度是（）。","o":["O(2^n)","O(nlogn)","O(n^2)","O(n)"]},{"n":25,"t":"single","q":"在数据标注过程中，（ ）不是标注工作的规范要求。","o":["标注员需根据统一的标准操作","标注过程中的任何不确定性应由标注员自行判断","需要确保标注的一致性和准确性","标注员应进行标注前的培训和指导"]},{"n":26,"t":"single","q":"在人机交互研究中，（ ）主要用于评估用户完成特定任务的效率。","o":["眼动追踪分析","用户满意度调查","点击流数据分析","任务完成时间测量"]},{"n":27,"t":"single","q":"在特征选择过程中，以下哪种方法主要用于评估特征与目标变量之间的关系（）。","o":["主成分分析（PCA）","卡方检验","递归特征消除（RFE）","随机森林"]},{"n":28,"t":"single","q":"通常所说的“计算机病毒”是指（）。","o":["细菌感染","生物病毒感染","被损坏的程序","特制的具有破坏性的程序"]},{"n":29,"t":"single","q":"在算法优化中，使用哈希表的主要目的是（）。","o":["存储大量数据","快速检索数据","排序数据","压缩数据"]},{"n":30,"t":"single","q":"数据标注的质检环节有（）种。","o":["1","2","3","4"]},{"n":31,"t":"single","q":"数据去重的目的不包括以下哪一项（）。","o":["减少数据存储量","提高数据分析效率","增加数据的多样性","保证数据质量"]},{"n":32,"t":"single","q":"使用交叉验证可以有效地（）。","o":["增加数据量","减少计算资源","提高模型泛化能力","降低模型复杂度"]},{"n":33,"t":"single","q":"以下哪个算法常用于图像的边缘检测?","o":["直方图均衡化","Canny边缘检测","霍夫曼编码","卡尔曼滤波"]},{"n":34,"t":"single","q":"（）是视频中的基本信息单元。","o":["帧","帧速率","时基","分钟"]},{"n":35,"t":"single","q":"在数据标注中，规则的普遍性主要是指什么（）。","o":["规则适用于所有类型的数据","规则适用于所有标注者","规则适用于所有类似的项目","规则适用于所有时间"]},{"n":36,"t":"single","q":"在数据标注中，YAML格式相较于JSON格式的优势不包括（）。","o":["更易于人类阅读和编写","支持注释","数据解析速度更快","支持复杂的数据结构"]},{"n":37,"t":"single","q":"在数据标注项目中，以下哪个角色通常不负责标注任务","o":["标注员","项目经理","数据科学家","质量控制专员"]},{"n":38,"t":"single","q":"在决策树算法中，设置最大深度可以预防（）。","o":["欠拟合","过拟合","偏差","方差"]},{"n":39,"t":"single","q":"以下哪项不是职业道德在企业发展中的作用（）。","o":["增强员工的归属感","促进企业内部和谐","鼓励员工频繁跳槽","建立良好的企业文化"]},{"n":40,"t":"single","q":"混合模式中，人工标注的主要作用是什么（）。","o":["完全替代自动化标注","仅在自动化标注失败时介入","提供训练数据给自动化模型","处理复杂和模糊的案例"]},{"n":41,"t":"single","q":"在数据清洗过程中，哪种方法最适合处理异常值（）。","o":["删除所有异常值","将异常值替换为平均值","将异常值替换为中位数","要根据业务逻辑和数据分布进行分析处理"]},{"n":42,"t":"single","q":"在算法设计中，哪些因素通常不会影响算法的时间复杂度（）。","o":["常数因子","循环的迭代次数","算法中使用的函数调用","算法的输入数据类型"]},{"n":43,"t":"single","q":"数据标注的基本流程通常不包括以下哪一项（）。","o":["数据收集","数据清洗","数据预处理","数据解释"]},{"n":44,"t":"single","q":"在算法优化中，避免使用全局变量是为了（）。","o":["提高算法的执行效率","降低算法的内存消耗","减少算法的可维护性","增加算法的复杂度"]},{"n":45,"t":"single","q":"在利用人工智能进行业务流程优化时，以下哪项不是AI技术可以带来的潜在好处（）。","o":["提高决策速度和准确性","减少对人工操作的依赖","增加流程的复杂性","提升客户服务体验"]},{"n":46,"t":"single","q":"在算法优化中，多线程和多进程技术主要用于解决什么问题（）。","o":["减少算法的内存占用","提高算法的计算精度","提高算法的并行处理能力","优化算法的输出格式"]},{"n":47,"t":"single","q":"在特征构造中，以下哪项不是常用的技术（）。","o":["特征提取","特征选择","特征组合","特征删除"]},{"n":48,"t":"single","q":"在数据标注过程中，标注员首先需要进行的操作是（）。","o":["理解标注规则","选择标注工具","开始标注数据","提交标注结果"]},{"n":49,"t":"single","q":"在数据清理中，处理缺失值的以下方法中，哪种是用某个特征的均值来填充缺失值（）。","o":["删除含有缺失值的行","用中位数填充","用众数填充","用均值填充"]},{"n":50,"t":"single","q":"虚拟现实交互技术在医疗领域的应用，不包括（ )。","o":["语音会诊","远程协作手术","虚拟手术训练","手术规划及导航"]},{"n":51,"t":"single","q":"（）就是热爱自我的工作，认真做事、全心全意地做事。","o":["爱岗敬业","遵纪守法","严守纪律","确保稳定"]},{"n":52,"t":"single","q":"在图形用户界面（GUI）设计中，（ ）是常见的交互元素。","o":["进度条","搜索引擎","数据分析工具","后台数据库"]},{"n":53,"t":"single","q":"当采集动态视觉类业务数据时，（ ）帧率设置更适合捕捉快速运动的物体细节。","o":["10fps","25fps","60fps","5fps"]},{"n":54,"t":"single","q":"在数据标注团队中，以下哪个角色最有可能负责标注结果的审核和修正（）。","o":["审核员","标注员","机器学习模型","项目经理"]},{"n":55,"t":"single","q":"构建实践教学体系的基本原则有（）。","o":["特色性原则","实用型原则","混合型原则","理论性原则"]},{"n":56,"t":"single","q":"根据《计算机软件保护条例》，软件著作权自何时产生?","o":["软件完成登记后","软件首次发表后","软件创作完成时","软件正式发布后"]},{"n":57,"t":"single","q":"在图像分割的数据标注中，以下哪种算法常被用于提高标注效率（）。","o":["随机森林算法","K-Means 算法","卷积神经网络算法（CNN）","决策树算法"]},{"n":58,"t":"single","q":"数据标注时，若需要为一段文本分配情感标签，常用的方法是（ ）。","o":["命名实体识别","情感分析","图像分割","语音转文字"]},{"n":59,"t":"single","q":"最后，业务流程重组关注的是（）的业务流程，一切“重组”工作全部是围绕业务流程展开的。","o":["企业","个人","团体","组织"]},{"n":60,"t":"single","q":"在机器学习中，过拟合通常是指模型（）。","o":["欠学习","学习能力不足","过学习","学习能力过强"]},{"n":61,"t":"multi","q":"在数据清洗过程中，以下哪些属于异常数据处理的方法（）。","o":["删除异常值","使用模型预测异常值","保留异常值进行标记","替换异常值"]},{"n":62,"t":"multi","q":"以下哪些方法可以用于时间序列数据的特征构造（）。","o":["滑动窗口技术","特征删除","小波变换","傅里叶变换"]},{"n":63,"t":"multi","q":"在图像处理领域，以下哪些操作是常见的图像增强技术?","o":["调整亮度和对比度","色彩校正","边缘检测","噪声降低"]},{"n":64,"t":"multi","q":"以下哪些措施有助于提高模型的泛化能力（）。","o":["减少特征数量","应用集成学习方法","使用更复杂的模型","早停法"]},{"n":65,"t":"multi","q":"在特征选择过程中，以下哪些方法可以有效提高模型的性能和可解释性（）。","o":["信息增益","递归特征消除","主成分分析","随机森林的特征重要性评估"]},{"n":66,"t":"multi","q":"在进行数据分析工作时，哪些策略能够有效提升分析工作的效率（）。","o":["使用自动化工具来处理数据预处理步骤","采用高级统计软件进行复杂的数据分析","通过数据可视化快速识别数据中的模式和趋势","手动检查每一条数据以确保数据质量"]},{"n":67,"t":"multi","q":"混合模式在哪些情况下可能更为有效（）。","o":["数据集非常大且多样化时","需要快速迭代模型时","标注任务具有高度复杂性时","数据质量要求极高时"]},{"n":68,"t":"multi","q":"具备工匠精神的员工通常具备哪些特质（）。","o":["对工作有热情","追求快速完成任务","对质量有高标准","持续创新和改进"]},{"n":69,"t":"multi","q":"在业务数据审核中，以下（ ）技术可以提高数据审核的效率。","o":["完全依赖人工手动检查数据","使用人工智能进行自动审核","构建审计日志跟踪数据变更","使用随机抽样技术验证数据质量"]},{"n":70,"t":"multi","q":"为了提高数据标注的准确性，可以采取哪些措施（）。","o":["增加标注员之间的讨论","使用先进的标注工具","定期进行标注员之间的交叉验证","增加标注员工作时间"]},{"n":71,"t":"judge","q":"使用协作软件时，所有团队成员可以看到私人聊天记录。","o":["对","错"]},{"n":72,"t":"judge","q":"若直接使用原始数据的话，不会影响数据决策的准确性和效率。","o":["对","错"]},{"n":73,"t":"judge","q":"人机交互技术的发展历程包括命令行界面交互阶段、图形用户界面交互阶段和自然用户界面交互阶段。","o":["对","错"]},{"n":74,"t":"judge","q":"算法的最坏情况时间复杂度总是比最好情况时间复杂度更能反映算法的实际性能。","o":["对","错"]},{"n":75,"t":"judge","q":"LDA是有监督的降维方法，而PCA是无监督的降维方法。","o":["对","错"]},{"n":76,"t":"judge","q":"职工道德修养与企业发展没有直接关系。","o":["对","错"]},{"n":77,"t":"judge","q":"在数据采集系统中，设置异常报警时，通常不需要考虑历史数据的统计分析来确定阈值","o":["对","错"]},{"n":78,"t":"judge","q":"交互设计的目标是让人更好的适应机器。","o":["对","错"]},{"n":79,"t":"judge","q":"算法模型的测试可以仅依赖于准确率一个指标来评价模型的性能。","o":["对","错"]},{"n":80,"t":"judge","q":"数据清洗是数据分析过程中的一个可选步骤，可以忽略不计。","o":["对","错"]},{"n":81,"t":"judge","q":"自动化管理是特征构造方法常见的应用场景。","o":["对","错"]},{"n":82,"t":"judge","q":"有效语音的判定不需要考虑语音的背景噪声水平。","o":["对","错"]},{"n":83,"t":"judge","q":"模型的召回率越高，意味着模型的假阳性率也越高。","o":["对","错"]},{"n":84,"t":"judge","q":"在所有情况下，数据标准化都是必要的。","o":["对","错"]},{"n":85,"t":"judge","q":"大数据采集过程中，数据的一致性不是需要关注的问题","o":["对","错"]},{"n":86,"t":"judge","q":"数据采集的方法有数据库采集、调查问卷采集、报表采集和网页数据采集。","o":["对","错"]},{"n":87,"t":"judge","q":"过拟合时训练样本的检验准确度会下降。","o":["对","错"]},{"n":88,"t":"judge","q":"语音识别系统的准确性不会受到说话人情绪变化的影响。","o":["对","错"]},{"n":89,"t":"judge","q":"数据分析的目的是发现数据中的模式和关联，以便做出决策。","o":["对","错"]},{"n":90,"t":"judge","q":"根据数据标注者类型不同，数据标注可分为人工标注和机器标注。","o":["对","错"]},{"n":91,"t":"judge","q":"p值越小，说明数据与原假设越不相容，越有理由拒绝原假设。","o":["对","错"]},{"n":92,"t":"judge","q":"数据可视化的目的仅仅是为了使数据看起来更加美观。","o":["对","错"]},{"n":93,"t":"judge","q":"聚类不是常见的噪声数据的处理方法。","o":["对","错"]},{"n":94,"t":"judge","q":"在数据采集系统维护中，数据的完整性和准确性是维护工作的重点之一（）。","o":["对","错"]},{"n":95,"t":"judge","q":"索引是数据库中用来提高数据查询速度的一种结构。","o":["对","错"]},{"n":96,"t":"judge","q":"回归分析中，只包括一个自变量和一个因变量，且二者的关系可用一条直线近似表示，这种回归分析称为一元线性回归分析。","o":["对","错"]},{"n":97,"t":"judge","q":"处理噪声数据可以采用分箱的方法。","o":["对","错"]},{"n":98,"t":"judge","q":"召回率不是分类算法常用的评价指标。","o":["对","错"]},{"n":99,"t":"judge","q":"标注任务是按照数据标注规范对数据集进行标注的过程。","o":["对","错"]},{"n":100,"t":"judge","q":"智能交互技术在工业设计中可实现应用于生理状态信息监控。","o":["对","错"]}]}]};
+
+</script>
+<script>
+/* 官方标准答案：抓取自问卷星三套自测卷的交卷结果页（2026-10-26），已按题目选项校验 */
+window.ANSWER_META = {"note":"官方标准答案：2026-10-26 从问卷星三套自测卷交卷结果页抓取，已逐题校验。","source":"wjx-result","generated":"2026-10-26"};
+window.ANSWER_KEY = {"A":{"1":"D","2":"B","3":"A","4":"A","5":"A","6":"B","7":"C","8":"D","9":"A","10":"C","11":"B","12":"A","13":"C","14":"B","15":"A","16":"A","17":"B","18":"A","19":"C","20":"B","21":"B","22":"C","23":"D","24":"B","25":"A","26":"C","27":"B","28":"B","29":"A","30":"C","31":"C","32":"D","33":"B","34":"A","35":"C","36":"B","37":"A","38":"A","39":"B","40":"C","41":"C","42":"A","43":"A","44":"C","45":"C","46":"A","47":"B","48":"D","49":"C","50":"B","51":"A","52":"C","53":"C","54":"C","55":"D","56":"B","57":"C","58":"D","59":"C","60":"C","61":"ABCD","62":"ABCD","63":"ABC","64":"ACD","65":"ABC","66":"ABCD","67":"BC","68":"ABCD","69":"ABC","70":"ABC","71":"A","72":"A","73":"A","74":"A","75":"A","76":"B","77":"A","78":"B","79":"B","80":"B","81":"A","82":"A","83":"A","84":"B","85":"A","86":"B","87":"A","88":"B","89":"B","90":"B","91":"B","92":"B","93":"B","94":"A","95":"A","96":"A","97":"A","98":"A","99":"A","100":"B"},"B":{"1":"A","2":"C","3":"B","4":"D","5":"D","6":"A","7":"D","8":"B","9":"B","10":"D","11":"C","12":"B","13":"B","14":"B","15":"B","16":"D","17":"A","18":"A","19":"D","20":"D","21":"B","22":"A","23":"B","24":"A","25":"B","26":"A","27":"D","28":"A","29":"B","30":"A","31":"A","32":"B","33":"C","34":"D","35":"D","36":"B","37":"A","38":"A","39":"A","40":"A","41":"A","42":"A","43":"D","44":"B","45":"A","46":"A","47":"C","48":"B","49":"C","50":"A","51":"A","52":"D","53":"C","54":"A","55":"B","56":"D","57":"B","58":"C","59":"C","60":"A","61":"ABCD","62":"ABCD","63":"ABCD","64":"ACD","65":"ABCD","66":"ABCD","67":"ABCD","68":"ABCD","69":"CD","70":"ABD","71":"B","72":"A","73":"B","74":"B","75":"B","76":"A","77":"A","78":"A","79":"B","80":"B","81":"A","82":"B","83":"B","84":"B","85":"A","86":"B","87":"B","88":"B","89":"A","90":"A","91":"A","92":"A","93":"A","94":"B","95":"A","96":"B","97":"B","98":"B","99":"B","100":"A"},"C":{"1":"B","2":"A","3":"B","4":"A","5":"B","6":"A","7":"D","8":"D","9":"A","10":"D","11":"D","12":"C","13":"B","14":"B","15":"D","16":"A","17":"C","18":"B","19":"C","20":"C","21":"C","22":"B","23":"A","24":"B","25":"B","26":"C","27":"B","28":"D","29":"B","30":"C","31":"C","32":"C","33":"B","34":"A","35":"C","36":"C","37":"B","38":"B","39":"C","40":"D","41":"D","42":"A","43":"D","44":"A","45":"C","46":"C","47":"D","48":"A","49":"D","50":"A","51":"A","52":"A","53":"C","54":"A","55":"B","56":"C","57":"C","58":"B","59":"A","60":"C","61":"ABCD","62":"ACD","63":"ABCD","64":"BD","65":"ABCD","66":"ABC","67":"ABC","68":"ACD","69":"BCD","70":"ABC","71":"B","72":"B","73":"A","74":"B","75":"A","76":"B","77":"B","78":"B","79":"B","80":"B","81":"A","82":"B","83":"B","84":"B","85":"B","86":"A","87":"B","88":"B","89":"A","90":"A","91":"A","92":"B","93":"A","94":"A","95":"A","96":"A","97":"A","98":"B","99":"A","100":"A"}};
+
+</script>
+<script>
+/* 人工智能训练师 · 理论自测练习 —— 纯前端，无需联网 */
+(function () {
+  'use strict';
+
+  var PAPERS = (window.QUIZ_DATA && window.QUIZ_DATA.papers) || [];
+  var KEY = window.ANSWER_KEY || {};
+  var META = window.ANSWER_META || {};
+  var EXAM_SECONDS = 90 * 60;
+  var LS = 'aitp.v1';
+
+  var ALL = [];
+  var BY_ID = {};
+  var QMAP = {};
+  var TYPES = ['single', 'multi', 'judge'];
+  PAPERS.forEach(function (p) {
+    BY_ID[p.id] = p;
+    p.questions.forEach(function (q) {
+      q.pid = p.id;
+      q.key = p.id + '#' + q.n;
+      ALL.push(q);
+      QMAP[q.key] = q;
+    });
+  });
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+  function byPaperNo(a, b) {
+    if (a.pid !== b.pid) return a.pid < b.pid ? -1 : 1;
+    return a.n - b.n;
+  }
+  function typeLabel(t) { return t === 'multi' ? '多选题' : (t === 'judge' ? '判断题' : '单选题'); }
+
+  /* ---------------- storage ---------------- */
+  function readDB() {
+    var d = null;
+    try { d = JSON.parse(window.localStorage.getItem(LS) || 'null'); } catch (e) { d = null; }
+    if (!d || typeof d !== 'object') d = {};
+    d.papers = d.papers || {};
+    d.wrong = d.wrong || {};
+    d.fav = d.fav || {};
+    d.overrides = d.overrides || {};
+    d.history = d.history || [];
+    d.settings = d.settings || {};
+    return d;
+  }
+  var db = readDB();
+  var memOnly = false;
+  function save() {
+    if (memOnly) return;
+    try { window.localStorage.setItem(LS, JSON.stringify(db)); }
+    catch (e) { memOnly = true; }
+  }
+  function pstate(pid) {
+    var s = db.papers[pid];
+    if (!s) {
+      s = { answers: {}, flags: {}, idx: 0, mode: '', done: false, score: null, used: 0, deadline: 0,
+            types: null, random: false, order: null, total: 0 };
+      db.papers[pid] = s;
+    }
+    return s;
+  }
+
+  /* ---------------- utils ---------------- */
+  var app = document.getElementById('app');
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function cloneTpl(id) {
+    return document.getElementById(id).content.firstElementChild.cloneNode(true);
+  }
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1900);
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return pad2(m) + ':' + pad2(s);
+  }
+  function fmtUsed(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m > 0 ? m + ' 分 ' + s + ' 秒' : s + ' 秒';
+  }
+  function letterAt(i) { return 'ABCDEFGH'.charAt(i); }
+  function sortedLetters(str) {
+    return (str || '').toUpperCase().split('').filter(function (c, i, a) { return 'ABCDEFGH'.indexOf(c) >= 0 && a.indexOf(c) === i; }).sort().join('');
+  }
+  function correctOf(q) {
+    var ov = db.overrides[q.pid];
+    if (ov && ov[q.n]) return sortedLetters(ov[q.n]);
+    var k = KEY[q.pid];
+    return k && k[q.n] ? sortedLetters(k[q.n]) : '';
+  }
+  function typeName(t) { return t === 'multi' ? '多选题' : (t === 'judge' ? '判断题' : '单选题'); }
+  function typeTagClass(t) { return t === 'multi' ? 'tag multi' : (t === 'judge' ? 'tag judge' : 'tag'); }
+
+  /* ---------------- modal ---------------- */
+  function showModal(title, text, okText, onOk, cancelText) {
+    var m = cloneTpl('tpl-modal');
+    $('.modal h3', m).textContent = title;
+    $('.modal p', m).textContent = text;
+    $('.modal .btn-primary', m).textContent = okText || '确定';
+    $('.modal .btn:not(.btn-primary)', m).textContent = cancelText || '取消';
+    var root = document.getElementById('modalRoot');
+    root.appendChild(m);
+    function close() { if (m.parentNode) m.parentNode.removeChild(m); }
+    m.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b) { if (e.target === m) close(); return; }
+      var act = b.getAttribute('data-act');
+      if (act === 'modal-ok') { close(); if (onOk) onOk(); }
+      else if (act === 'modal-cancel') { close(); }
+    });
+    return close;
+  }
+
+  /* ---------------- state ---------------- */
+  var route = 'home';
+  var sess = null;
+  var lastResult = null;
+  var revOnlyWrong = false;
+  var tickTimer = null;
+
+  function cur() { return sess.qs[sess.idx]; }
+
+  /* ---------------- session ---------------- */
+  function beginPaper(pid, mode, cfg) {
+    var p = BY_ID[pid];
+    var s = pstate(pid);
+    cfg = cfg || {};
+    if (cfg.fresh) {
+      var types = (cfg.types && cfg.types.length ? cfg.types.slice() : TYPES.slice());
+      var picked = p.questions.filter(function (q) { return types.indexOf(q.t) >= 0; });
+      if (cfg.random) shuffle(picked);
+      s.answers = {}; s.flags = {}; s.idx = 0; s.done = false; s.score = null; s.used = 0;
+      s.mode = mode;
+      s.types = types;
+      s.random = !!cfg.random;
+      s.order = picked.map(function (q) { return q.key; });
+      s.total = picked.length;
+      s.deadline = mode === 'exam' ? Date.now() + EXAM_SECONDS * 1000 : 0;
+    } else {
+      if (!s.order) {
+        s.order = p.questions.map(function (q) { return q.key; });
+        s.total = p.questions.length;
+      }
+      if (mode === 'exam' && !s.deadline) s.deadline = Date.now() + EXAM_SECONDS * 1000;
+    }
+    var list = s.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+    if (!list.length) {
+      list = p.questions.slice();
+      s.order = list.map(function (q) { return q.key; });
+      s.total = list.length;
+    }
+    sess = {
+      pid: pid,
+      title: p.title + (list.length === p.questions.length ? '' : '（' + list.length + ' 题）'),
+      mode: mode, qs: list, answers: s.answers, flags: s.flags,
+      idx: Math.min(s.idx || 0, list.length - 1),
+      st: s, persist: true, startAt: Date.now(), pending: {},
+      deadline: mode === 'exam' ? s.deadline : 0, limit: EXAM_SECONDS,
+      random: !!s.random, types: s.types || TYPES.slice(), done: false
+    };
+    route = 'quiz';
+    render();
+  }
+
+  function beginSet(qs, title, mode, random) {
+    if (random) shuffle(qs);
+    sess = {
+      pid: null, title: title, mode: mode, qs: qs,
+      answers: {}, flags: {}, idx: 0, st: null, persist: false,
+      startAt: Date.now(), pending: {},
+      deadline: mode === 'exam' ? Date.now() + Math.max(600, qs.length * 54) * 1000 : 0,
+      limit: Math.max(600, qs.length * 54), done: false,
+      random: !!random, types: null
+    };
+    route = 'quiz';
+    render();
+  }
+
+  function applyOrder(randomize) {
+    if (!sess) return;
+    var head = sess.qs.slice(0, sess.idx + 1);
+    var tail = sess.qs.slice(sess.idx + 1);
+    if (randomize) shuffle(tail); else tail.sort(byPaperNo);
+    sess.qs = head.concat(tail);
+    sess.random = randomize;
+    if (sess.persist && sess.st) {
+      sess.st.order = sess.qs.map(function (q) { return q.key; });
+      sess.st.random = randomize;
+      save();
+    }
+    render();
+    toast(randomize ? '已切换：后面的题随机出' : '已切换：后面的题按顺序出');
+  }
+
+  function openStart(pid, mode) {
+    var p = BY_ID[pid];
+    var s = db.papers[pid] || null;
+    var last = db.settings.start || {};
+    var random = !!last.random;
+    var types = (last.types && last.types.length ? last.types.slice() : TYPES.slice());
+    var m = cloneTpl('tpl-start');
+    $('h3', m).textContent = p.title + ' · ' + (mode === 'exam' ? '考试模式' : '练习模式');
+    $('.start-sub', m).textContent = mode === 'exam'
+      ? '限时 90 分钟，交卷后出分并逐题显示答案。'
+      : '每答一题立即判对错，适合边练边记。';
+    var note = $('.start-note', m);
+    var warn = $('.start-warn', m);
+    if (s && !s.done && Object.keys(s.answers).length) {
+      warn.classList.remove('hidden');
+      warn.textContent = '这一卷还有未交卷的作答（' + Object.keys(s.answers).length + ' 题），开始新的会覆盖。想接着做请点首页的「继续」。';
+    }
+    function sync() {
+      $all('#segOrder button', m).forEach(function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-order') === 'random') === random);
+      });
+      $all('#typeChecks input', m).forEach(function (i) { i.checked = types.indexOf(i.value) >= 0; });
+      var n = p.questions.filter(function (q) { return types.indexOf(q.t) >= 0; }).length;
+      note.textContent = '本次共 ' + n + ' 题 · 满分 ' + n + ' 分' + (random ? ' · 题序随机打乱' : ' · 按题号顺序');
+      $('[data-act="start-ok"]', m).disabled = n === 0;
+    }
+    $all('#segOrder button', m).forEach(function (b) {
+      b.addEventListener('click', function () { random = b.getAttribute('data-order') === 'random'; sync(); });
+    });
+    $all('#typeChecks input', m).forEach(function (i) {
+      i.addEventListener('change', function () {
+        types = TYPES.filter(function (t) { return $('[value="' + t + '"]', m).checked; });
+        sync();
+      });
+    });
+    sync();
+    var root = document.getElementById('modalRoot');
+    root.appendChild(m);
+    function close() { if (m.parentNode) m.parentNode.removeChild(m); }
+    m.addEventListener('click', function (e) {
+      if (e.target === m) { close(); return; }
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      var act = b.getAttribute('data-act');
+      if (act === 'start-cancel') close();
+      if (act === 'start-ok') {
+        if (!types.length) return;
+        db.settings.start = { random: random, types: types.slice() };
+        save();
+        close();
+        beginPaper(pid, mode, { fresh: true, types: types.slice(), random: random });
+      }
+    });
+  }
+
+  function remainingSec() {
+    if (!sess || !sess.deadline) return 0;
+    return Math.max(0, Math.ceil((sess.deadline - Date.now()) / 1000));
+  }
+  function usedSec() {
+    if (!sess) return 0;
+    if (sess.mode === 'exam' && sess.deadline) return Math.min(sess.limit || EXAM_SECONDS, (sess.limit || EXAM_SECONDS) - remainingSec());
+    return (Date.now() - sess.startAt) / 1000;
+  }
+
+  function persistPos() {
+    if (sess && sess.persist && sess.st) { sess.st.idx = sess.idx; save(); }
+  }
+
+  /* ---------------- scoring ---------------- */
+  function evaluate(s) {
+    var stat = { single: [0, 0], multi: [0, 0], judge: [0, 0] };
+    var score = 0, unknown = 0, blank = 0, wrong = [];
+    s.qs.forEach(function (q) {
+      var c = correctOf(q), a = s.answers[q.key] || '';
+      stat[q.t][1]++;
+      if (!c) { unknown++; return; }
+      if (a === c) { score++; stat[q.t][0]++; }
+      else { if (!a) blank++; else wrong.push(q); }
+    });
+    return { score: score, stat: stat, unknown: unknown, blank: blank, wrong: wrong, total: s.qs.length };
+  }
+
+  function addWrong(q) {
+    if (!db.wrong[q.key]) { db.wrong[q.key] = { pid: q.pid, n: q.n, at: Date.now() }; save(); }
+  }
+  function removeWrong(q) {
+    if (db.wrong[q.key]) { delete db.wrong[q.key]; save(); }
+  }
+
+  /* ---------------- timer ---------------- */
+  function tick() {
+    if (route !== 'quiz' || !sess) return;
+    var t = document.getElementById('timerText');
+    if (!t) return;
+    var exam = sess.mode === 'exam';
+    var sec = exam ? remainingSec() : (Date.now() - sess.startAt) / 1000;
+    t.textContent = fmtClock(sec);
+    var box = document.getElementById('timer');
+    if (box) box.classList.toggle('warn', exam && sec <= 300);
+    if (exam && sess.deadline && sec <= 0 && !sess.done) {
+      sess.done = true;
+      evaluateAndFinish(true);
+    }
+  }
+
+  /* ---------------- render root ---------------- */
+  function render() {
+    var node;
+    if (route === 'home') node = viewHome();
+    else if (route === 'quiz') node = viewQuiz();
+    else if (route === 'result') node = viewResult();
+    else if (route === 'wrong') node = viewList('wrong');
+    else if (route === 'fav') node = viewList('fav');
+    else if (route === 'history') node = viewHistory();
+    else node = viewKey();
+
+    app.innerHTML = '';
+    app.appendChild(node);
+    window.scrollTo(0, 0);
+    paintNav();
+    clearInterval(tickTimer);
+    if (route === 'quiz') {
+      tickTimer = setInterval(tick, 1000);
+      tick();
+    }
+  }
+
+  function paintNav() {
+    $all('.top-link').forEach(function (b) {
+      var nav = b.getAttribute('data-nav');
+      b.classList.toggle('active', nav === route || (route === 'result' && nav === 'home'));
+    });
+    var wc = Object.keys(db.wrong).length;
+    document.getElementById('navWrong').textContent = wc ? '(' + wc + ')' : '';
+  }
+
+  /* ---------------- home ---------------- */
+  function viewHome() {
+    var node = cloneTpl('tpl-home');
+    var grid = $('#paperGrid', node);
+    var mini = $('#miniGrid', node);
+
+    PAPERS.forEach(function (p) {
+      var card = cloneTpl('tpl-paper-card');
+      var s = db.papers[p.id] || null;
+      $('.p-title', card).textContent = p.title;
+      var doneCount = s ? Object.keys(s.answers).length : 0;
+      var best = null;
+      db.history.forEach(function (h) {
+        if (h.pid === p.id && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
+      });
+      $('.p-score', card).textContent = best === null ? '—' : String(best);
+      $('.p-done', card).textContent = String(doneCount);
+
+      var resume = $('.p-resume', card);
+      if (s && !s.done && doneCount > 0) {
+        var total = s.total || (s.order ? s.order.length : 100);
+        resume.classList.remove('hidden');
+        resume.textContent = '继续：' + (s.mode === 'practice' ? '练习' : '考试') +
+          ' · ' + (s.random ? '随机' : '顺序') + ' · ' + doneCount + '/' + total;
+        resume.addEventListener('click', function () { beginPaper(p.id, s.mode || 'exam', {}); });
+        $('.btn-primary', card).textContent = '重新考试';
+      }
+      $('.btn-primary', card).addEventListener('click', function () { openStart(p.id, 'exam'); });
+      $('[data-act="card-practice"]', card).addEventListener('click', function () { openStart(p.id, 'practice'); });
+      grid.appendChild(card);
+    });
+
+    function miniCard(icon, cls, title, sub, fn) {
+      var c = el('div', 'mini-card');
+      c.appendChild(el('div', 'ico ' + cls, icon));
+      var box = el('div');
+      box.appendChild(el('h4', null, title));
+      box.appendChild(el('p', null, sub));
+      c.appendChild(box);
+      c.addEventListener('click', fn);
+      return c;
+    }
+    mini.appendChild(miniCard('🎲', '', '随机模拟考', '三套卷随机抽 50 题 · 45 分钟', function () {
+      startRandomExam();
+    }));
+    mini.appendChild(miniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
+      route = 'wrong'; render();
+    }));
+    mini.appendChild(miniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
+      route = 'fav'; render();
+    }));
+    mini.appendChild(miniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
+      route = 'history'; render();
+    }));
+
+    var kpis = $('#homeKpis', node);
+    var answered = 0;
+    PAPERS.forEach(function (p) { var s = db.papers[p.id]; if (s) answered += Object.keys(s.answers).length; });
+    var avg = null;
+    if (db.history.length) {
+      var sum = 0, cnt = 0;
+      db.history.forEach(function (h) { sum += h.score / (h.total || 100) * 100; cnt++; });
+      avg = Math.round(sum / cnt);
+    }
+    [['题库总量', ALL.length + ' 题'], ['累计作答', answered + ' 题'], ['历史平均分', avg === null ? '—' : avg], ['错题数量', Object.keys(db.wrong).length + ' 题']].forEach(function (x) {
+      var k = cloneTpl('tpl-kpi');
+      $('span', k).textContent = x[0];
+      $('b', k).textContent = x[1];
+      kpis.appendChild(k);
+    });
+
+    $('[data-act="random-exam"]', node).addEventListener('click', function () { startRandomExam(); });
+    $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
+    $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
+    return node;
+  }
+
+  function startRandomExam() {
+    var pool = ALL.slice();
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    var picks = pool.slice(0, 50).map(function (q) {
+      return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
+    }).sort(function (a, b) { return a.pid < b.pid ? -1 : (a.pid > b.pid ? 1 : a.n - b.n); });
+    beginSet(picks, '随机模拟考（50 题）', 'exam');
+  }
+
+  /* ---------------- quiz view ---------------- */
+  function viewQuiz() {
+    var node = cloneTpl('tpl-quiz');
+    $('#qTitle', node).textContent = sess.title;
+    $('#qModeTag', node).textContent = sess.mode === 'exam' ? '考试模式' : '练习模式';
+    var btnOrder = $('#btnOrder', node);
+    if (btnOrder) {
+      btnOrder.textContent = sess.random ? '随机' : '顺序';
+      btnOrder.classList.toggle('on', !!sess.random);
+      btnOrder.title = sess.random ? '当前随机出题，点击改为顺序' : '当前按题号顺序，点击改为随机';
+      btnOrder.addEventListener('click', function () { applyOrder(!sess.random); });
+    }
+
+    var opts = $('#qOpts', node);
+    var cells = $('#cards', node);
+
+    function rebuildQuestion() {
+      var q = cur();
+      opts.innerHTML = '';
+      q.o.forEach(function (txt, i) {
+        var o = cloneTpl('tpl-option');
+        o.setAttribute('data-letter', letterAt(i));
+        $('.letter', o).textContent = letterAt(i);
+        $('.txt', o).textContent = txt;
+        o.addEventListener('click', function () { choose(i); });
+        opts.appendChild(o);
+      });
+      $('#qNo', node).textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
+      $('#qType', node).textContent = typeName(q.t);
+      $('#qType', node).className = typeTagClass(q.t);
+      $('#qHint', node).textContent = q.t === 'multi' ? '（多选，全对才得分）' : '';
+      $('#qStem', node).textContent = q.q;
+      var fav = $('[data-act="fav"]', node);
+      fav.textContent = db.fav[q.key] ? '★' : '☆';
+      fav.classList.toggle('on', !!db.fav[q.key]);
+      paintOptions();
+      paintCard();
+      paintFeedback();
+      tick();
+    }
+
+    // build answer card once
+    sess.qs.forEach(function (q, i) {
+      var c = cloneTpl('tpl-cell');
+      c.textContent = String(q.n);
+      c.setAttribute('data-idx', String(i));
+      c.addEventListener('click', function () {
+        sess.idx = i; persistPos();
+        rebuildQuestion();
+        var side = $('#sideCard', node);
+        if (side) side.classList.remove('open');
+      });
+      cells.appendChild(c);
+    });
+
+    function pendingOf(q) {
+      if (!sess.pending) sess.pending = {};
+      if (sess.pending[q.key] == null) sess.pending[q.key] = sortedLetters(sess.answers[q.key] || '');
+      return sess.pending[q.key];
+    }
+
+    function choose(i) {
+      var q = cur();
+      var L = letterAt(i);
+      if (q.t === 'multi') {
+        var next = pendingOf(q);
+        next = next.indexOf(L) >= 0 ? next.replace(L, '') : sortedLetters(next + L);
+        if (sess.mode === 'practice' && sess.answers[q.key]) { toast('本题已作答，可「清空本题」后重选'); return; }
+        sess.pending[q.key] = next;
+        if (sess.mode === 'exam') {
+          setAnswer(q, next);
         }
+        paintOptions();
+        paintCard();
+        return;
+      }
+      if (sess.mode === 'practice' && sess.answers[q.key]) { toast('本题已作答，可「清空本题」后重选'); return; }
+      setAnswer(q, L);
+      if (sess.mode === 'practice') {
+        var c = correctOf(q);
+        if (c && L === c) { removeWrong(q); } else if (c) { addWrong(q); }
+      }
+      paintOptions();
+      paintCard();
+      paintFeedback();
+    }
 
-        function parseBlock(block, num) {
-            if (!block || block.length === 0) return null;
-            let fullText = block.join('\n');
-            let firstLine = block[0] || '';
-            let title = firstLine.replace(/^\d+\s*[.、）\)]\s*/, '').trim();
+    function setAnswer(q, v) {
+      if (v) sess.answers[q.key] = sortedLetters(v);
+      else delete sess.answers[q.key];
+      if (sess.persist) save();
+    }
 
-            let answer = null;
-            let ansMatch = fullText.match(/[（(]\s*([A-Da-dvVxX√×])\s*[）)]/);
-            if (ansMatch) {
-                answer = ansMatch[1].toUpperCase();
-                title = title.replace(/[（(]\s*[A-Da-dvVxX√×]\s*[）)]/, '').trim();
-            }
+    function paintOptions() {
+      var q = cur();
+      var a = sess.answers[q.key] || '';
+      var c = correctOf(q);
+      var showKey = sess.mode === 'practice' && !!a;
+      var pending = (sess.mode === 'practice' && q.t === 'multi') ? pendingOf(q) : a;
+      $all('.opt', opts).forEach(function (o) {
+        var L = o.getAttribute('data-letter');
+        var sel = (sess.mode === 'practice' && q.t === 'multi' && !a ? pending : a).indexOf(L) >= 0;
+        o.classList.toggle('sel', sel);
+        o.classList.toggle('correct', showKey && c.indexOf(L) >= 0);
+        o.classList.toggle('wrong', showKey && sel && c.indexOf(L) < 0);
+        var mk = $('.mark', o);
+        if (showKey && c.indexOf(L) >= 0) mk.textContent = '正确答案';
+        else if (showKey && sel) mk.textContent = '你的选择';
+        else mk.textContent = '';
+      });
+      var b = $('[data-act="confirm-multi"]', node);
+      var needConfirm = sess.mode === 'practice' && q.t === 'multi' && !sess.answers[q.key];
+      b.classList.toggle('hidden', !needConfirm);
+    }
 
-            let optionMap = {};
-            let optLines = [];
-            for (let line of block) {
-                let m = line.match(/^([A-D])\s*[.、．]\s*(.*)/);
-                if (m) {
-                    let label = m[1];
-                    let text = m[2].trim();
-                    optionMap[label] = text;
-                    optLines.push({ label: label, text: text });
-                }
-            }
+    function paintFeedback() {
+      var box = $('#qFeedback', node);
+      var q = cur();
+      var a = sess.answers[q.key] || '';
+      if (sess.mode !== 'practice' || !a) { box.classList.add('hidden'); return; }
+      var c = correctOf(q);
+      box.classList.remove('hidden');
+      box.className = 'feedback';
+      if (!c) {
+        box.classList.add('unknown');
+        box.textContent = '本题尚未收录参考答案，可在「答案管理」中补充。';
+      } else if (a === c) {
+        box.textContent = '✓ 回答正确';
+      } else {
+        box.classList.add('bad');
+        var txt = '✗ 回答错误，正确答案：' + c.split('').join(' ');
+        box.textContent = txt;
+      }
+    }
 
-            let explanation = '';
-            for (let line of block) {
-                let clean = line.replace(/\*\*/g, '').trim();
-                if (/^解析\s*[:：]/i.test(clean)) {
-                    explanation = clean.replace(/^解析\s*[:：]\s*/i, '').trim();
-                    break;
-                }
-            }
-            if (!explanation) {
-                for (let line of block) {
-                    let clean = line.replace(/\*\*/g, '').trim();
-                    if (clean.indexOf('解析') !== -1 && clean.indexOf('：') !== -1) {
-                        let parts = clean.split(/解析\s*[:：]/i);
-                        if (parts.length > 1) {
-                            explanation = parts[1].trim();
-                            break;
-                        }
-                    }
-                }
-            }
+    function paintCard() {
+      var cellsArr = $all('.cell', cells);
+      var done = 0, flag = 0;
+      sess.qs.forEach(function (q, i) {
+        var cell = cellsArr[i];
+        var d = !!sess.answers[q.key];
+        if (d) done++;
+        if (sess.flags[q.key]) flag++;
+        cell.classList.toggle('done', d);
+        cell.classList.toggle('flag', !!sess.flags[q.key]);
+        cell.classList.toggle('cur', i === sess.idx);
+      });
+      $('#infoDone', node).textContent = String(done);
+      $('#infoFlag', node).textContent = String(flag);
+      $('#infoLeft', node).textContent = String(sess.qs.length - done);
+      $('#cardProgress', node).textContent = done + '/' + sess.qs.length;
+    }
 
-            let isSingle = (optLines.length >= 4 && optionMap['A'] && optionMap['B'] && optionMap['C'] && optionMap['D']);
+    // footer buttons
+    $('[data-act="prev"]', node).addEventListener('click', function () {
+      if (sess.idx > 0) { sess.idx--; persistPos(); rebuildQuestion(); }
+    });
+    $('[data-act="next"]', node).addEventListener('click', function () {
+      if (sess.idx < sess.qs.length - 1) { sess.idx++; persistPos(); rebuildQuestion(); }
+      else toast('已经是最后一题了');
+    });
+    $('[data-act="mark"]', node).addEventListener('click', function () {
+      var q = cur();
+      sess.flags[q.key] = !sess.flags[q.key];
+      if (sess.persist) save();
+      paintCard();
+      toast(sess.flags[q.key] ? '已标记，稍后可在答题卡查看' : '已取消标记');
+    });
+    $('[data-act="clear"]', node).addEventListener('click', function () {
+      var q = cur();
+      delete sess.answers[q.key];
+      if (sess.pending) delete sess.pending[q.key];
+      if (sess.persist) save();
+      paintOptions(); paintCard(); paintFeedback();
+    });
+    $('[data-act="fav"]', node).addEventListener('click', function () {
+      var q = cur();
+      if (db.fav[q.key]) delete db.fav[q.key];
+      else db.fav[q.key] = { pid: q.pid, n: q.n, at: Date.now() };
+      save(); rebuildQuestion();
+    });
+    $('[data-act="confirm-multi"]', node).addEventListener('click', function () {
+      var q = cur();
+      var v = pendingOf(q);
+      if (!v) { toast('请先选择至少一个选项'); return; }
+      setAnswer(q, v);
+      var c = correctOf(q);
+      if (c && v === c) removeWrong(q); else if (c) addWrong(q);
+      paintOptions(); paintCard(); paintFeedback();
+    });
+    $('[data-act="toggle-card"]', node).addEventListener('click', function () {
+      $('#sideCard', node).classList.toggle('open');
+    });
+    $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
+    $('[data-act="exit"]', node).addEventListener('click', function () {
+      var answered = Object.keys(sess.answers).length;
+      if (answered && !sess.done) {
+        showModal('暂时离开？', '作答进度会保存在本机，下次可点「继续上次作答」。', '离开', function () {
+          persistPos(); sess = null; route = 'home'; render();
+        }, '继续答题');
+      } else { sess = null; route = 'home'; render(); }
+    });
 
-            if (isSingle) {
-                let options = [
-                    { label: 'A', text: optionMap['A'] || '' },
-                    { label: 'B', text: optionMap['B'] || '' },
-                    { label: 'C', text: optionMap['C'] || '' },
-                    { label: 'D', text: optionMap['D'] || '' }
-                ];
-                if (!options[0].text && !options[1].text) return null;
-                return {
-                    id: num,
-                    type: 'single',
-                    title: title || firstLine.replace(/^\d+\s*[.、）\)]\s*/, ''),
-                    options: options,
-                    answer: answer || '',
-                    explanation: explanation || '',
-                    userAnswer: null,
-                    isCorrect: null,
-                };
-            } else {
-                let jTitle = title;
-                jTitle = jTitle.replace(/^[（(]\s*[vVxX√×]?\s*[）)]\s*/, '');
-                jTitle = jTitle.replace(/[（(]\s*[vVxX√×]\s*[）)]/, '').trim();
-                if (!answer) {
-                    let m = firstLine.match(/[（(]\s*([vVxX√×])\s*[）)]/);
-                    if (m) answer = m[1].toUpperCase();
-                }
-                return {
-                    id: num,
-                    type: 'judge',
-                    title: jTitle || title,
-                    options: [
-                        { label: '√', text: '正确' },
-                        { label: '×', text: '错误' }
-                    ],
-                    answer: answer || '',
-                    explanation: explanation || '',
-                    userAnswer: null,
-                    isCorrect: null,
-                };
-            }
-        }
+    rebuildQuestion();
+    return node;
+  }
 
-        // ============================================================
-        // 渲染和交互
-        // ============================================================
-        function renderQuestion() {
-            if (!questions.length || filteredIndices.length === 0) {
-                document.getElementById('questionCard').style.display = 'none';
-                document.getElementById('statusBar').style.display = 'none';
-                document.getElementById('filterTabs').style.display = 'none';
-                document.getElementById('emptyMsg').style.display = 'block';
-                return;
-            }
-            document.getElementById('statusBar').style.display = 'flex';
-            document.getElementById('filterTabs').style.display = 'block';
-            document.getElementById('questionCard').style.display = 'block';
-            document.getElementById('emptyMsg').style.display = 'none';
+  function confirmSubmit() {
+    var unanswered = sess.qs.filter(function (q) { return !sess.answers[q.key]; }).length;
+    var msg = '共 ' + sess.qs.length + ' 题，已答 ' + (sess.qs.length - unanswered) + ' 题';
+    if (unanswered) msg += '，还有 ' + unanswered + ' 题未作答（按错处理）';
+    msg += '。交卷后即可查看答案与解析。';
+    showModal('确认交卷？', msg, '交卷', function () { evaluateAndFinish(false); });
+  }
 
-            if (currentFilteredPos < 0) currentFilteredPos = 0;
-            if (currentFilteredPos >= filteredIndices.length) currentFilteredPos = filteredIndices.length - 1;
-            const qIdx = filteredIndices[currentFilteredPos];
-            const q = questions[qIdx];
-            document.getElementById('currentIdxDisplay').textContent = currentFilteredPos + 1;
-            document.getElementById('jumpInput').value = currentFilteredPos + 1;
-            document.getElementById('totalCount').textContent = filteredIndices.length;
-            document.getElementById('wrongCount').textContent = wrongSet.size;
+  function evaluateAndFinish(auto) {
+    var s = sess;
+    var r = evaluate(s);
+    var used = usedSec();
+    if (s.persist && s.st) {
+      s.st.done = true;
+      s.st.score = r.score;
+      s.st.total = r.total;
+      s.st.used = Math.round(used);
+      s.st.submittedAt = Date.now();
+      s.st.idx = s.idx;
+    }
+    s.qs.forEach(function (q) {
+      var c = correctOf(q), a = s.answers[q.key] || '';
+      if (!c || !a) return;
+      if (a === c) removeWrong(q); else addWrong(q);
+    });
+    if (s.persist) {
+      db.history.push({
+        pid: s.pid, mode: s.mode, score: r.score, total: r.total, at: Date.now(), used: Math.round(used),
+        types: s.types ? s.types.slice() : null, random: !!s.random
+      });
+      if (db.history.length > 200) db.history = db.history.slice(-200);
+      save();
+    }
+    lastResult = { sess: s, r: r, used: used };
+    revOnlyWrong = false;
+    route = 'result';
+    render();
+    if (auto) toast('时间到，已自动交卷');
+  }
 
-            const filterLabel = filterType === 'all' ? '全部' :
-                (filterType === 'single' ? '单选题' :
-                    (filterType === 'judge' ? '判断题' : '📕 错题本'));
-            document.getElementById('filterInfo').textContent =
-                `${filterLabel} (${filteredIndices.length}/${questions.length})`;
+  /* ---------------- result ---------------- */
+  function viewResult() {
+    var node = cloneTpl('tpl-result');
+    var s = lastResult.sess, r = lastResult.r;
+    var pct = r.total ? r.score / r.total : 0;
 
-            document.getElementById('qNumber').textContent = q.id;
-            document.getElementById('qType').textContent = q.type === 'single' ? '单选题' : '判断题';
-            document.getElementById('qTitle').textContent = q.title;
+    $('#scoreVal', node).textContent = String(r.score);
+    $('#scoreOf', node).textContent = '得分 / ' + r.total;
+    $('#resTitle', node).textContent = s.mode === 'exam' ? '交卷完成' : '练习完成';
+    var praise = pct >= 0.9 ? '状态非常好，保持手感。' : pct >= 0.75 ? '基础扎实，重点补错题。' : pct >= 0.6 ? '还有提升空间，建议按章节重刷。' : '建议先过一遍错题，再重做本卷。';
+    $('#resSub', node).textContent = s.title + ' · 用时 ' + fmtUsed(lastResult.used) + ' · 正确率 ' + Math.round(pct * 100) + '%　' + praise;
 
-            const container = document.getElementById('optionsContainer');
-            container.innerHTML = '';
-            const feedback = document.getElementById('feedback');
-            feedback.style.display = 'none';
+    var ring = $('#ring', node);
+    var C = 2 * Math.PI * 64;
+    ring.setAttribute('stroke-dasharray', String(C));
+    ring.setAttribute('stroke-dashoffset', String(C));
+    var color = pct >= 0.8 ? '#16a34a' : pct >= 0.6 ? '#3b5bdb' : '#dc2626';
+    ring.setAttribute('stroke', color);
+    setTimeout(function () {
+      ring.style.transition = 'stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)';
+      ring.setAttribute('stroke-dashoffset', String(C * (1 - pct)));
+    }, 60);
 
-            q.options.forEach((opt) => {
-                const div = document.createElement('div');
-                div.className = 'option-item';
-                const isUserSelected = (q.userAnswer === opt.label);
-                if (q.userAnswer !== null) {
-                    div.classList.add('disabled');
-                    if (opt.label === q.answer) div.classList.add('correct');
-                    else if (isUserSelected && opt.label !== q.answer) div.classList.add('wrong');
-                    if (isUserSelected) div.classList.add('selected');
-                }
-                div.innerHTML = `
-                    <span class="label">${opt.label}</span>
-                    <span class="text">${opt.text}</span>
-                    <span class="result-icon"></span>
-                `;
-                div.dataset.label = opt.label;
-                if (q.userAnswer === null) {
-                    div.addEventListener('click', function() {
-                        selectOption(qIdx, this.dataset.label);
-                    });
-                }
-                container.appendChild(div);
+    var kpis = $('#resKpis', node);
+    [['用时', fmtUsed(lastResult.used)],
+     ['单选题', r.stat.single[0] + ' / ' + r.stat.single[1]],
+     ['多选题', r.stat.multi[0] + ' / ' + r.stat.multi[1]],
+     ['判断题', r.stat.judge[0] + ' / ' + r.stat.judge[1]]].forEach(function (x) {
+      var k = cloneTpl('tpl-kpi');
+      $('span', k).textContent = x[0];
+      $('b', k).textContent = x[1];
+      kpis.appendChild(k);
+    });
+
+    var revBox = $('#review', node);
+    var toggle = $('#revToggle', node);
+    function paintReview() {
+      revBox.innerHTML = '';
+      var list = s.qs.filter(function (q) {
+        if (!revOnlyWrong) return true;
+        var c = correctOf(q), a = s.answers[q.key] || '';
+        return !c || a !== c;
+      });
+      if (!list.length) { revBox.appendChild(el('div', 'empty', '没有需要回顾的题目 🎉')); return; }
+      list.forEach(function (q) {
+        var item = cloneTpl('tpl-review');
+        var c = correctOf(q), a = s.answers[q.key] || '';
+        var ok = c && a === c;
+        item.classList.toggle('bad', !ok);
+        $('.no', item).textContent = q.pid + ' 卷 第 ' + q.n + ' 题';
+        var tag = $('.tag', item);
+        tag.textContent = typeName(q.t);
+        tag.className = typeTagClass(q.t);
+        var badge = el('span', 'ans-badge ' + (ok ? 'ok' : (c ? 'bad' : 'mid')), ok ? '答对' : (c ? (a ? '答错' : '未作答') : '未收录答案'));
+        $('.badge-wrap', item).appendChild(badge);
+        $('.rs', item).textContent = q.q;
+        $('.ro-my span', item).textContent = a ? a.split('').join(' ') : '未作答';
+        $('.ro-ck span', item).textContent = c ? c.split('').join(' ') : '—';
+        revBox.appendChild(item);
+      });
+      toggle.textContent = revOnlyWrong ? '显示全部' : '只看错题';
+    }
+    paintReview();
+    toggle.addEventListener('click', function () { revOnlyWrong = !revOnlyWrong; paintReview(); });
+
+    $('[data-act="retry"]', node).addEventListener('click', function () {
+      if (s.persist) beginPaper(s.pid, s.mode, { fresh: true, types: s.types, random: s.random });
+      else beginSet(s.qs.map(function (q) { return q; }), s.title, s.mode, s.random);
+    });
+    $('[data-act="to-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
+    $('[data-act="home"]', node).addEventListener('click', function () { route = 'home'; render(); });
+    return node;
+  }
+
+  /* ---------------- lists ---------------- */
+  function viewList(kind) {
+    var node = cloneTpl('tpl-list');
+    var map = kind === 'wrong' ? db.wrong : db.fav;
+    var keys = Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); });
+    var title = kind === 'wrong' ? '错题本' : '我的收藏';
+    $('#listTitle', node).textContent = title;
+    $('#listDesc', node).textContent = kind === 'wrong'
+      ? '共 ' + keys.length + ' 道。答对后会自动移出；也可手动移除。'
+      : '共 ' + keys.length + ' 道。收藏的题目可以随时回看。';
+
+    var body = $('#listBody', node);
+    var qs = keys.map(function (k) {
+      var q = ALL.filter(function (x) { return x.key === k; })[0];
+      return q;
+    }).filter(Boolean);
+
+    if (!qs.length) {
+      body.appendChild(el('div', 'empty', kind === 'wrong' ? '还没有错题，去刷一套卷子吧 📚' : '还没有收藏，点题目右上角 ☆ 收藏'));
+    }
+
+    qs.forEach(function (q) {
+      var row = cloneTpl('tpl-row');
+      var tag = $('.tag', row);
+      tag.textContent = typeName(q.t);
+      tag.className = typeTagClass(q.t);
+      $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+      var c = correctOf(q);
+      $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+      $('[data-act="row-go"]', row).addEventListener('click', function () {
+        beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+      });
+      $('[data-act="row-del"]', row).addEventListener('click', function () {
+        delete map[q.key]; save(); render();
+      });
+      body.appendChild(row);
+    });
+
+    $('[data-act="list-practice"]', node).addEventListener('click', function () {
+      if (!qs.length) { toast('列表是空的'); return; }
+      beginSet(qs, title + ' · 重练', 'practice');
+    });
+    $('[data-act="list-clear"]', node).addEventListener('click', function () {
+      if (!qs.length) return;
+      showModal('清空' + title + '？', '该操作不可撤销。', '清空', function () {
+        qs.forEach(function (q) { delete map[q.key]; });
+        save(); render();
+      });
+    });
+    return node;
+  }
+
+  /* ---------------- history ---------------- */
+  function viewHistory() {
+    var node = cloneTpl('tpl-history');
+    var list = $('#hisList', node);
+    var items = db.history.slice().reverse();
+    $('#hisDesc', node).textContent = '共 ' + items.length + ' 条记录，保存在本机浏览器；换浏览器或清缓存会丢，可先导出备份。';
+    if (!items.length) list.appendChild(el('div', 'empty', '还没有记录，做一套卷子就会自动保存 🎯'));
+    items.forEach(function (h) {
+      var total = h.total || 100;
+      var pct = total ? Math.round(h.score / total * 100) : 0;
+      var row = cloneTpl('tpl-his-row');
+      $('.his-score b', row).textContent = h.score + '/' + total;
+      $('.his-score span', row).textContent = '得分';
+      var d = new Date(h.at);
+      var dateStr = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+      $('.his-title', row).textContent = (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
+        ' · ' + (h.mode === 'exam' ? '考试' : '练习');
+      var meta = dateStr + ' · 用时 ' + fmtUsed(h.used || 0);
+      if (h.types && h.types.length && h.types.length < TYPES.length) meta += ' · 仅' + h.types.map(typeLabel).join('、');
+      if (h.random) meta += ' · 随机';
+      $('.his-meta', row).textContent = meta;
+      var b = $('.his-pct', row);
+      b.textContent = pct + '%';
+      b.className = 'ans-badge ' + (pct >= 80 ? 'ok' : pct >= 60 ? 'mid' : 'bad') + ' his-pct';
+      list.appendChild(row);
+    });
+    $('[data-act="his-clear"]', node).addEventListener('click', function () {
+      if (!db.history.length) { toast('还没有记录'); return; }
+      showModal('清空学习记录？', '只清除这份记录列表，不影响各卷作答进度、错题本和收藏。', '清空', function () {
+        db.history = []; save(); render(); toast('记录已清空');
+      });
+    });
+    $('[data-act="his-export"]', node).addEventListener('click', function () {
+      if (!db.history.length) { toast('还没有记录'); return; }
+      var blob = new Blob([JSON.stringify(db.history, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '学习记录.json';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    });
+    return node;
+  }
+
+  /* ---------------- key management ---------------- */
+  function keyText(pid) {
+    var p = BY_ID[pid];
+    var lines = p.questions.map(function (q) {
+      var c = correctOf(q);
+      return q.n + ' ' + (c || '?');
+    });
+    return lines.join('\n');
+  }
+
+  function viewKey() {
+    var node = cloneTpl('tpl-key');
+    var sel = $('#keyPaper', node);
+    var ta = $('#keyText', node);
+
+    function refresh() {
+      var pid = sel.value;
+      ta.value = keyText(pid);
+      var ov = db.overrides[pid] || {};
+      var n = Object.keys(ov).length;
+      $('#keyStat', node).textContent = n ? ('本卷已修改 ' + n + ' 题') : '本卷使用默认答案';
+    }
+    sel.addEventListener('change', refresh);
+
+    $('[data-act="key-load"]', node).addEventListener('click', refresh);
+    $('[data-act="key-reset"]', node).addEventListener('click', function () {
+      var pid = sel.value;
+      showModal('恢复默认答案？', '将清除你在 ' + pid + ' 卷手动修改的答案。', '恢复', function () {
+        delete db.overrides[pid]; save(); refresh(); toast('已恢复默认答案');
+      });
+    });
+    $('[data-act="key-apply"]', node).addEventListener('click', function () {
+      var pid = sel.value;
+      var raw = ta.value.replace(/[，、；;]/g, '\n');
+      var count = 0, bad = 0;
+      raw.split(/\r?\n/).forEach(function (line) {
+        var t = line.trim();
+        if (!t) return;
+        var m = t.match(/^(\d{1,3})\s*[\.:：\-]?\s*([A-Ha-h]+)$/) || t.match(/^(\d{1,3})\s+([A-Ha-h\s]+)$/);
+        if (!m) { bad++; return; }
+        var no = parseInt(m[1], 10);
+        var ans = sortedLetters(m[2].replace(/\s/g, ''));
+        var p = BY_ID[pid];
+        if (!p || !p.questions.some(function (q) { return q.n === no; })) { bad++; return; }
+        if (!ans) { bad++; return; }
+        db.overrides[pid] = db.overrides[pid] || {};
+        db.overrides[pid][no] = ans;
+        count++;
+      });
+      save();
+      $('#keyStat', node).textContent = '本卷已修改 ' + Object.keys(db.overrides[pid] || {}).length + ' 题';
+      toast('已更新 ' + count + ' 题' + (bad ? '，' + bad + ' 行无法识别' : ''));
+      if (lastResult && route === 'result') render();
+    });
+    $('[data-act="key-export"]', node).addEventListener('click', function () {
+      var out = {};
+      PAPERS.forEach(function (p) {
+        out[p.id] = {};
+        p.questions.forEach(function (q) { out[p.id][q.n] = correctOf(q); });
+      });
+      var blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '答案导出.json';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    });
+    $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
+      showModal('重置全部进度？', '将清空三套卷的作答记录、错题本、收藏与历史成绩（答案修改也会清除）。', '全部清空', function () {
+        db.papers = {}; db.wrong = {}; db.fav = {}; db.history = []; db.overrides = {};
+        save(); lastResult = null; refresh(); toast('已重置');
+      });
+    });
+    $('[data-act="key-import"]', node).addEventListener('click', function () {
+      var inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.json,application/json';
+      inp.addEventListener('change', function () {
+        var f = inp.files && inp.files[0];
+        if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () {
+          try {
+            var data = JSON.parse(String(rd.result));
+            var n = 0;
+            Object.keys(data).forEach(function (pid) {
+              if (!BY_ID[pid]) return;
+              db.overrides[pid] = db.overrides[pid] || {};
+              Object.keys(data[pid]).forEach(function (no) {
+                var ans = sortedLetters(String(data[pid][no]));
+                if (ans) { db.overrides[pid][no] = ans; n++; }
+              });
             });
-
-            if (q.userAnswer !== null) {
-                const isCorrect = (q.userAnswer === q.answer);
-                feedback.style.display = 'block';
-                const answerStr = q.type === 'single' ? q.answer : (q.answer === 'V' ? '正确' : '错误');
-                const userStr = q.type === 'single' ? q.userAnswer : (q.userAnswer === 'V' ? '正确' : '错误');
-                const icon = isCorrect ? '✅' : '❌';
-                const cls = isCorrect ? 'fb-correct' : 'fb-wrong';
-                let explainHtml = '';
-                if (q.explanation) {
-                    explainHtml = `<div class="fb-explain">💡 解析：${q.explanation}</div>`;
-                }
-                feedback.innerHTML = `
-                    <div class="${cls}">${icon} 您的选择：${userStr}  ${isCorrect ? '回答正确！' : '回答错误'}</div>
-                    <div class="fb-answer">📌 正确答案：${answerStr}</div>
-                    ${explainHtml}
-                `;
-            }
-
-            const answeredCount = Object.keys(answered).length;
-            document.getElementById('progressStats').innerHTML = `
-                <span>📝 已答：${answeredCount} / ${questions.length}</span>
-                <span>✅ 正确：${correctCount}</span>
-                <span>📕 错题：${wrongSet.size}</span>
-            `;
-        }
-
-        function selectOption(qIdx, label) {
-            const q = questions[qIdx];
-            if (q.userAnswer !== null) return;
-            q.userAnswer = label;
-            const isCorrect = (label === q.answer);
-            q.isCorrect = isCorrect;
-            if (isCorrect) {
-                correctCount++;
-                // 如果该题在错题本中，答对后移除（表示已掌握）
-                if (wrongSet.has(q.id)) {
-                    wrongSet.delete(q.id);
-                }
-            } else {
-                // 答错，加入错题本
-                wrongSet.add(q.id);
-            }
-            answered[q.id] = label;
-            renderQuestion();
-        }
-
-        function goQuestion(delta) {
-            const newPos = currentFilteredPos + delta;
-            if (newPos < 0 || newPos >= filteredIndices.length) return;
-            currentFilteredPos = newPos;
-            renderQuestion();
-        }
-
-        function jumpTo() {
-            const input = document.getElementById('jumpInput');
-            let num = parseInt(input.value);
-            if (isNaN(num) || num < 1 || num > filteredIndices.length) return;
-            currentFilteredPos = num - 1;
-            renderQuestion();
-        }
-
-        function submitAll() {
-            const total = questions.length;
-            const answeredCount = Object.keys(answered).length;
-            if (answeredCount < total) {
-                if (!confirm(`还有 ${total - answeredCount} 道题未作答，确定提交吗？`)) return;
-            }
-            let correct = 0;
-            for (let q of questions) {
-                if (q.userAnswer === q.answer) correct++;
-            }
-            const percent = (correct / total * 100).toFixed(1);
-            alert(`📊 提交完成！\n\n总题数：${total}\n已答：${answeredCount}\n正确：${correct}\n得分：${percent}%\n错题数：${wrongSet.size}`);
-        }
-
-        // ============================================================
-        // 过滤
-        // ============================================================
-        function setFilter(type) {
-            filterType = type;
-            document.querySelectorAll('.filter-tabs button').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.filter === type);
-            });
-
-            let indices = [];
-            if (type === 'all') {
-                indices = questions.map((_, idx) => idx);
-            } else if (type === 'single') {
-                indices = questions.map((q, idx) => ({ idx, type: q.type }))
-                    .filter(item => item.type === 'single')
-                    .map(item => item.idx);
-            } else if (type === 'judge') {
-                indices = questions.map((q, idx) => ({ idx, type: q.type }))
-                    .filter(item => item.type === 'judge')
-                    .map(item => item.idx);
-            } else if (type === 'wrong') {
-                indices = questions.map((q, idx) => ({ idx, id: q.id }))
-                    .filter(item => wrongSet.has(item.id))
-                    .map(item => item.idx);
-            }
-            filteredIndices = indices;
-            if (filteredIndices.length === 0) {
-                document.getElementById('questionCard').style.display = 'none';
-                document.getElementById('statusBar').style.display = 'none';
-                document.getElementById('emptyMsg').style.display = 'block';
-                document.getElementById('emptyMsg').textContent =
-                    type === 'wrong' ? '🎉 错题本为空，继续加油！' : '当前筛选下没有题目，请更换筛选条件。';
-                return;
-            }
-            currentFilteredPos = 0;
-            renderQuestion();
-        }
-
-        // ============================================================
-        // 加载数据
-        // ============================================================
-        function loadFromText() {
-            const text = document.getElementById('rawInput').value.trim();
-            if (!text) { alert('请粘贴题目文本！'); return; }
-            const parsed = parseQuestions(text);
-            if (parsed.length === 0) {
-                alert('未能解析出任何题目，请检查文本格式是否正确。\n\n' +
-                    '确保每道题以数字开头（如 1. 或 1、），\n' +
-                    '单选题有 A. B. C. D. 选项，\n' +
-                    '解析以“解析：”开头。');
-                return;
-            }
-            questions = parsed;
-            answered = {};
-            correctCount = 0;
-            wrongSet.clear();
-            currentFilteredPos = 0;
-            filterType = 'all';
-            filteredIndices = questions.map((_, idx) => idx);
-            document.querySelectorAll('.filter-tabs button').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.filter === 'all');
-            });
-
-            const singleCount = questions.filter(q => q.type === 'single').length;
-            const judgeCount = questions.filter(q => q.type === 'judge').length;
-            const summary = document.getElementById('parseSummary');
-            summary.style.display = 'block';
-            summary.innerHTML = `✅ 解析成功！共 <span>${questions.length}</span> 道题（<span>${singleCount}</span> 道单选 + <span>${judgeCount}</span> 道判断）`;
-
-            renderQuestion();
-        }
-
-        function loadFromFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const status = document.getElementById('fileStatus');
-            status.textContent = '⏳ 加载中...';
-            const reader = new FileReader();
-
-            if (file.name.endsWith('.docx')) {
-                reader.onload = function(e) {
-                    const arrayBuffer = e.target.result;
-                    mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-                        .then(function(result) {
-                            document.getElementById('rawInput').value = result.value;
-                            status.textContent = '✅ 解析完成，正在加载...';
-                            loadFromText();
-                            status.textContent = '✅ 已加载 ' + file.name;
-                        })
-                        .catch(function(err) {
-                            status.textContent = '❌ 解析失败：' + err.message;
-                            alert('解析 .docx 失败，请尝试将内容粘贴到文本框中。');
-                        });
-                };
-                reader.readAsArrayBuffer(file);
-            } else {
-                reader.onload = function(e) {
-                    document.getElementById('rawInput').value = e.target.result;
-                    status.textContent = '✅ 已加载 ' + file.name;
-                    loadFromText();
-                };
-                reader.readAsText(file);
-            }
-            event.target.value = '';
-        }
-
-        // ============================================================
-        // 键盘快捷键
-        // ============================================================
-        document.addEventListener('keydown', function(e) {
-            // 如果焦点在输入框或文本区域，不干扰
-            const tag = e.target.tagName.toLowerCase();
-            if (tag === 'input' || tag === 'textarea') return;
-
-            const key = e.key;
-            let handled = false;
-            // 左箭头 或 A 或 W（上一题）
-            if (key === 'ArrowLeft' || key === 'a' || key === 'A' || key === 'w' || key === 'W') {
-                goQuestion(-1);
-                handled = true;
-                e.preventDefault();
-            }
-            // 右箭头 或 D 或 S（下一题）
-            else if (key === 'ArrowRight' || key === 'd' || key === 'D' || key === 's' || key === 'S') {
-                goQuestion(1);
-                handled = true;
-                e.preventDefault();
-            }
-            // 可选：上下箭头也控制
-            else if (key === 'ArrowUp') {
-                goQuestion(-1);
-                handled = true;
-                e.preventDefault();
-            } else if (key === 'ArrowDown') {
-                goQuestion(1);
-                handled = true;
-                e.preventDefault();
-            }
-            // 数字快捷键（1-4选择选项） 可扩展，暂不实现
-        });
-
-        // ============================================================
-        // 内置示例数据（前10题）
-        // ============================================================
-        const sampleData =
-            `1. 图灵测试是图灵在（ ）年在论文中《计算机与智能》中提出的。
-
-A.1956
-
-B.1950
-
-C.1946
-
-D.1940
-
-**解析：** 正确答案为B（1950）。 A项（1956）不符合题意。 C项（1946）不符合题意。 D项（1940）不符合题意。
-
-2. 机器学习不包括（ ）。
-
-A.监督学习
-
-B.强化学习
-
-C.非监督学习
-
-D.群体学习
-
-**解析：** 正确答案为D（群体学习）。 A项（监督学习）不符合题意。 B项（强化学习）不符合题意。 C项（非监督学习）不符合题意。
-
-3. AI的诞生是在（ ）。
-
-A.1956年
-
-B.1950年
-
-C.1957年
-
-D.1958
-
-**解析：** 正确答案为A（1956年）。 B项（1950年）不符合题意。 C项（1957年）不符合题意。 D项（1958）不符合题意。
-
-4. 不属于人工智能的三大学派是（ ）。
-
-A.符号学派
-
-B.联结学派
-
-C.行为学派
-
-D.统计学派
-
-**解析：** 正确答案为D（统计学派）。 A项（符号学派）不符合题意。 B项（联结学派）不符合题意。 C项（行为学派）不符合题意。
-
-5. 神经网络是（ ）学派的成果。
-
-A.符号学派
-
-B.联接学派
-
-C.行为学派
-
-D.统计学派
-
-**解析：** 正确答案为B（联接学派）。 A项（符号学派）不符合题意。 C项（行为学派）不符合题意。 D项（统计学派）不符合题意。
-
-6. 人工智能是指（ ）。
-
-A.自然智能
-
-B.人的智能
-
-C.机器智能
-
-D.通用智能
-
-**解析：** 正确答案为C（机器智能）。 A项（自然智能）不符合题意。 B项（人的智能）不符合题意。 D项（通用智能）不符合题意。
-
-7. 支持向量机算法属于（ ）。
-
-A.决策树学习
-
-B.统计学习
-
-C.集成学习
-
-D.记忆学习
-
-**解析：** 正确答案为B（统计学习）。 A项（决策树学习）不符合题意。 C项（集成学习）不符合题意。 D项（记忆学习）不符合题意。
-
-8. 视觉、听觉、触觉、嗅觉属于智能的什么能力（ ）。
-
-A.感知能力
-
-B.记忆与思维能力
-
-C.学习能力
-
-D.行为能力
-
-**解析：** 正确答案为A（感知能力）。 B项（记忆与思维能力）不符合题意。 C项（学习能力）不符合题意。 D项（行为能力）不符合题意。
-
-9. 认为智能取决于知识的积累量及一般化程度的理论是（ ）。
-
-A.思维理论
-
-B.知识阈值理论
-
-C.进化理论
-
-D.控制理论
-
-**解析：** 正确答案为B（知识阈值理论）。 A项（思维理论）不符合题意。 C项（进化理论）不符合题意。 D项（控制理论）不符合题意。
-
-10. 人工智能的目的是让机器能够（ ），以实现某些脑力劳动的机械化。
-
-A.具有智能
-
-B.和人一样工作
-
-C.完全代替人的大脑
-
-D.模拟、延伸和扩展人的智能
-
-**解析：** 正确答案为D（模拟、延伸和扩展人的智能）。 A项（具有智能）不符合题意。 B项（和人一样工作）不符合题意。 C项（完全代替人的大脑）不符合题意。`;
-
-        // ============================================================
-        // 初始化
-        // ============================================================
-        window.onload = function() {
-            document.getElementById('rawInput').value = sampleData;
-            loadFromText();
+            save(); refresh(); toast('已导入 ' + n + ' 条答案');
+          } catch (e) { toast('文件解析失败，请检查 JSON 格式'); }
         };
-    </script>
+        rd.readAsText(f, 'utf-8');
+      });
+      inp.click();
+    });
+
+    refresh();
+    return node;
+  }
+
+  /* ---------------- keyboard ---------------- */
+  document.addEventListener('keydown', function (e) {
+    if (route !== 'quiz' || !sess) return;
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    var k = String(e.key || '').toUpperCase();
+    if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
+      var q = cur();
+      var i = 'ABCDEFGH'.indexOf(k);
+      if (i < q.o.length) {
+        e.preventDefault();
+        var btns = $all('#qOpts .opt');
+        if (btns[i]) btns[i].click();
+      }
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      var nb = $('[data-act="next"]');
+      if (nb) nb.click();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      var pb = $('[data-act="prev"]');
+      if (pb) pb.click();
+    } else if (e.key === 'Enter') {
+      if ($('.modal-mask')) return;
+      e.preventDefault();
+      confirmSubmit();
+    }
+  });
+
+  /* ---------------- top nav ---------------- */
+  $all('.top-link').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var nav = b.getAttribute('data-nav');
+      if (nav === 'home') {
+        if (route === 'quiz' && sess && Object.keys(sess.answers).length && !sess.done) {
+          showModal('回到首页？', '本次作答进度会保存，稍后可继续。', '回到首页', function () {
+            persistPos(); sess = null; route = 'home'; render();
+          }, '继续答题');
+          return;
+        }
+        sess = null;
+        route = 'home';
+      } else if (nav === 'wrong') { route = 'wrong'; }
+      else if (nav === 'key') { route = 'key'; }
+      render();
+    });
+  });
+
+  document.addEventListener('click', function (e) {
+    var side = document.getElementById('sideCard');
+    if (!side || !side.classList.contains('open')) return;
+    if (side.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('[data-act="toggle-card"]')) return;
+    side.classList.remove('open');
+  });
+
+  window.addEventListener('beforeunload', function () { if (sess) persistPos(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden' && sess) persistPos();
+  });
+
+  /* ---------------- boot ---------------- */
+  if (!PAPERS.length) {
+    app.appendChild(el('div', 'empty', '题库数据未加载，请检查 data/questions.js 是否存在'));
+  } else {
+    render();
+  }
+})();
+
+</script>
 </body>
 </html>
