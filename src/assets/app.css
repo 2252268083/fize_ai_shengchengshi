@@ -315,7 +315,7 @@ select{
 }
 .modal h3{margin:0 0 8px;font-size:17px}
 .modal p{margin:0 0 18px;color:var(--ink-2);font-size:13.5px;line-height:1.7}
-.modal .acts{display:flex;gap:10px;justify-content:flex-end}
+.modal .acts{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 
 .drawer-btn{display:none}
 @media (max-width:900px){

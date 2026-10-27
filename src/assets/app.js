@@ -194,12 +194,19 @@
   function typeTagClass(t) { return t === 'multi' ? 'tag multi' : (t === 'judge' ? 'tag judge' : 'tag'); }
 
   /* ---------------- modal ---------------- */
-  function showModal(title, text, okText, onOk, cancelText, onCancel) {
+  function showModal(title, text, okText, onOk, cancelText, onCancel, extra) {
     var m = cloneTpl('tpl-modal');
     $('.modal h3', m).textContent = title;
     $('.modal p', m).textContent = text;
-    $('.modal .btn-primary', m).textContent = okText || '确定';
-    $('.modal .btn:not(.btn-primary)', m).textContent = cancelText || '取消';
+    var okBtn = $('.modal .btn-primary', m);
+    var cancelBtn = $('.modal .btn:not(.btn-primary)', m);
+    okBtn.textContent = okText || '确定';
+    cancelBtn.textContent = cancelText || '取消';
+    if (extra && extra.text) {
+      var eb = el('button', 'btn', extra.text);
+      eb.setAttribute('data-act', 'modal-extra');
+      okBtn.parentNode.insertBefore(eb, okBtn);
+    }
     var root = document.getElementById('modalRoot');
     root.appendChild(m);
     function close() { if (m.parentNode) m.parentNode.removeChild(m); }
@@ -208,6 +215,7 @@
       if (!b) { if (e.target === m) close(); return; }
       var act = b.getAttribute('data-act');
       if (act === 'modal-ok') { close(); if (onOk) onOk(); }
+      else if (act === 'modal-extra') { close(); if (extra && extra.onClick) extra.onClick(); }
       else if (act === 'modal-cancel') { close(); if (onCancel) onCancel(); }
     });
     return close;
@@ -462,10 +470,16 @@
           beginSession(p.id, 'all', mode, { fresh: true, random: false });
           return;
         }
-        showModal('重新开始整套？', '本卷已有作答记录。重新开始将清空本卷全部已答答案与标记（错题本、收藏、历史成绩保留）。', '清空并开始', function () {
-          clearPaperAnswers(p.id);
-          beginSession(p.id, 'all', mode, { fresh: true, random: false });
-        }, '取消');
+        showModal('本卷已有作答记录', '可以「继续做」保留本卷已答接着做，或「清空并开始」清空本卷全部已答答案与标记后重新做（错题本、收藏、历史成绩保留）。',
+          '清空并开始', function () {
+            clearPaperAnswers(p.id);
+            beginSession(p.id, 'all', mode, { fresh: true, random: false });
+          }, '取消', null,
+          { text: '继续做', onClick: function () {
+              var ms = st.sessions.all;
+              if (ms && ms.order && !ms.done) beginSession(p.id, 'all', mode, {});
+              else beginSession(p.id, 'all', mode, { fresh: true, random: false });
+            } });
       }
       $('.btn-primary', card).addEventListener('click', function () { startAll('exam'); });
       $('[data-act="card-practice"]', card).addEventListener('click', function () { startAll('practice'); });
