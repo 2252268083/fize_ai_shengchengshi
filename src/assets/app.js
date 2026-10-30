@@ -605,6 +605,11 @@
   function viewQuiz() {
     var node = cloneTpl('tpl-quiz');
     $('#qTitle', node).textContent = sess.title;
+    // 临时题组（全库随机/错题重练等）没有卷别，隐藏分类切换栏
+    if (!sess.pid) {
+      var jb = $('.jump-bar', node);
+      if (jb) jb.classList.add('hidden');
+    }
     $('#qModeTag', node).textContent = sess.mode === 'exam' ? '考试模式' : '练习模式';
     var btnOrder = $('#btnOrder', node);
     if (btnOrder) {
@@ -619,9 +624,9 @@
 
     function rebuildQuestion() {
       var q = cur();
-      // 跳转栏：当前题型按钮高亮
+      // 分类切换栏：当前模块高亮
       $all('.jt', node).forEach(function (b) {
-        b.classList.toggle('on', b.getAttribute('data-type') === q.t);
+        b.classList.toggle('on', b.getAttribute('data-type') === sess.mod);
       });
       opts.innerHTML = '';
       q.o.forEach(function (txt, i) {
@@ -827,13 +832,16 @@
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
       $('#sideCard', node).classList.toggle('open');
     });
-    // 跳转栏：一键切换题型（跳到该题型在本组题中的第一题）
+    // 分类模式：切换到只练该题型的模块会话（保留已答）；「全部」切回整套
     $all('[data-act="jump-type"]', node).forEach(function (b) {
       b.addEventListener('click', function () {
-        var t = b.getAttribute('data-type');
-        var i = sess.qs.findIndex(function (x) { return x.t === t; });
-        if (i < 0) { toast('本次练习中没有' + typeLabel(t)); return; }
-        sess.idx = i; persistPos(); rebuildQuestion();
+        if (!sess.pid) { toast('本练习不支持题型切换'); return; }
+        var mod = b.getAttribute('data-type');
+        var pid = sess.pid, mode = sess.mode;
+        var ms = modState(pid, mod);
+        persistPos();
+        if (ms.order && !ms.done) beginSession(pid, mod, mode, {});
+        else beginSession(pid, mod, mode, { fresh: true, random: false });
       });
     });
     // 跳转栏：按题号跳转（按题库题号找，随机顺序下也能定位）
