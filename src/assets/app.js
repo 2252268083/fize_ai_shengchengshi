@@ -582,25 +582,18 @@
       grid.parentNode.insertBefore(tr, grid.nextSibling);
     }
 
-    // 模拟考试：随机 60 单选 + 10 多选 + 30 判断，90 分钟（还原初赛节奏）
-    var paper0 = PAPERS[0];
+    // 模拟考试：随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟（临时会话，独立答案）
     function newMock() {
-      var ms = modState(paper0.id, 'mock');
-      clearModuleAnswers(paper0, 'mock');
-      var qs = pickMock();
-      ms.order = qs.map(function (q) { return q.key; });
-      ms.total = qs.length; ms.idx = 0; ms.done = false; ms.score = null; ms.used = 0;
-      ms.mode = 'exam'; ms.random = false;
-      ms.deadline = Date.now() + examLimit(qs.length) * 1000;
-      ms.at = Date.now();
-      save();
-      beginSession(paper0.id, 'mock', 'exam', {});
+      var qs = pickMock().map(function (q) {
+        return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
+      });
+      beginSet(qs, '模拟考试（100 题）', 'exam', false, true, 'mock');
     }
     function startMock() {
-      var ms = pstate(paper0.id).sessions.mock;
-      if (ms && ms.order && !ms.done && moduleAnswered(paper0.id, 'mock') > 0) {
-        showModal('模拟考试进行中', '上次模拟还有未交卷的作答（已答 ' + moduleAnswered(paper0.id, 'mock') + ' 题）。可「继续做」接着考（计时按剩余时间），或「重新抽题」开始新的一次模拟。',
-          '继续做', function () { beginSession(paper0.id, 'mock', 'exam', {}); }, '取消', null,
+      var t = db.temp;
+      if (t && t.key === 'mock' && t.order && t.order.length && Object.keys(t.answers || {}).length) {
+        showModal('模拟考试进行中', '上次模拟还有未交卷的作答（已答 ' + Object.keys(t.answers).length + ' 题）。可「继续做」接着考（计时按剩余时间），或「重新抽题」开始新的一次模拟。',
+          '继续做', function () { resumeTemp(); }, '取消', null,
           { text: '重新抽题', onClick: newMock });
         return;
       }
@@ -759,7 +752,25 @@
     }
 
     var opts = $('#qOpts', node);
-    var cells = $('#cards', node);
+    var pbars = $('#pbars', node);
+
+    /* 按题型构建进度条（代替原来的题号格子） */
+    var typeTotals = { single: 0, multi: 0, judge: 0 };
+    sess.qs.forEach(function (q) { typeTotals[q.t]++; });
+    ['single', 'multi', 'judge'].forEach(function (t) {
+      if (!typeTotals[t]) return;
+      var row = el('div', 'pbar-row');
+      row.appendChild(el('span', 'pbar-name', typeName(t)));
+      var track = el('span', 'pbar-track');
+      var fill = el('i');
+      fill.setAttribute('data-type', t);
+      track.appendChild(fill);
+      row.appendChild(track);
+      var num = el('span', 'pbar-num', '0/' + typeTotals[t]);
+      num.setAttribute('data-num', t);
+      row.appendChild(num);
+      pbars.appendChild(row);
+    });
 
     function rebuildQuestion() {
       var q = cur();
@@ -792,27 +803,6 @@
     }
 
     // build answer card once —— 按题型固定分组（单选→多选→判断），cell 用 data-idx 对应题序
-    var buckets = { single: [], multi: [], judge: [] };
-    sess.qs.forEach(function (q, i) { buckets[q.t].push(i); });
-    ['single', 'multi', 'judge'].forEach(function (t) {
-      if (!buckets[t].length) return;
-      cells.appendChild(el('div', 'card-sep', typeName(t)));
-      var group = el('div', 'card-group');
-      buckets[t].forEach(function (i) {
-        var c = cloneTpl('tpl-cell');
-        c.textContent = String(sess.qs[i].n);
-        c.setAttribute('data-idx', String(i));
-        c.addEventListener('click', function () {
-          sess.idx = i; persistPos();
-          rebuildQuestion();
-          var side = $('#sideCard', node);
-          if (side) side.classList.remove('open');
-        });
-        group.appendChild(c);
-      });
-      cells.appendChild(group);
-    });
-
     function pendingOf(q) {
       if (!sess.pending) sess.pending = {};
       if (sess.pending[q.key] == null) sess.pending[q.key] = sortedLetters(sess.answers[q.key] || '');
@@ -909,19 +899,21 @@
     }
 
     function paintCard() {
-      var cellsArr = $all('.cell', cells);
-      var byIdx = {};
-      cellsArr.forEach(function (c) { byIdx[parseInt(c.getAttribute('data-idx'), 10)] = c; });
       var done = 0, flag = 0;
-      sess.qs.forEach(function (q, i) {
-        var cell = byIdx[i];
-        if (!cell) return;
+      var byT = { single: 0, multi: 0, judge: 0 };
+      sess.qs.forEach(function (q) {
         var d = !!sess.answers[q.key];
-        if (d) done++;
+        if (d) { done++; byT[q.t]++; }
         if (sess.flags[q.key]) flag++;
-        cell.classList.toggle('done', d);
-        cell.classList.toggle('flag', !!sess.flags[q.key]);
-        cell.classList.toggle('cur', i === sess.idx);
+      });
+      $all('.pbar-track i', node).forEach(function (f) {
+        var t = f.getAttribute('data-type');
+        var tot = typeTotals[t] || 1;
+        f.style.width = Math.round(byT[t] / tot * 100) + '%';
+      });
+      $all('.pbar-num', node).forEach(function (n) {
+        var t = n.getAttribute('data-num');
+        n.textContent = byT[t] + '/' + typeTotals[t];
       });
       $('#infoDone', node).textContent = String(done);
       $('#infoFlag', node).textContent = String(flag);

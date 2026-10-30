@@ -139,7 +139,7 @@
       <span class="qtop-spacer"></span>
       <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
       <div class="qtop-actions">
-        <button class="btn btn-sm drawer-btn" data-act="toggle-card">答题卡</button>
+        <button class="btn btn-sm drawer-btn" data-act="toggle-card">进度</button>
         <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
       </div>
     </div>
@@ -178,13 +178,8 @@
         </div>
       </div>
       <aside class="side" id="sideCard">
-        <h4>答题卡 <span id="cardProgress"></span></h4>
-        <div class="cards" id="cards"></div>
-        <div class="legend">
-          <span><i class="l1"></i>已答</span>
-          <span><i class="l2"></i>未答</span>
-          <span><i class="l3"></i>标记</span>
-        </div>
+        <h4>做题进度 <span id="cardProgress"></span></h4>
+        <div class="pbars" id="pbars"></div>
         <div class="mini-info">
           <div><b id="infoDone">0</b>已答</div>
           <div><b id="infoFlag">0</b>标记</div>
@@ -201,10 +196,6 @@
     <span class="txt"></span>
     <span class="mark"></span>
   </div>
-</template>
-
-<template id="tpl-cell">
-  <button class="cell" data-idx=""></button>
 </template>
 
 <!-- ============ 结果 ============ -->
