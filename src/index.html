@@ -30,9 +30,12 @@
 <div class="toast" id="toast"></div>
 <div id="modalRoot"></div>
 
-<!-- ============ 首页 ============ -->
+<!-- ============ 首页 · 经典布局 ============ -->
 <template id="tpl-home">
   <section class="view-enter">
+    <div class="layout-bar">
+      <button class="layout-switch" data-act="layout-cycle"></button>
+    </div>
     <div class="hero">
       <h1>理论题库 · 训练与考试</h1>
       <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
@@ -69,6 +72,24 @@
     <div class="mini-grid" id="miniGrid"></div>
     <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
     <div class="kpis" id="homeKpis"></div>
+  </section>
+</template>
+
+<!-- ============ 首页 · 新版（A 单列主操作区 / B 左右双栏，共用外壳） ============ -->
+<template id="tpl-home2">
+  <section class="view-enter">
+    <div class="layout-bar">
+      <button class="layout-switch" data-act="layout-cycle"></button>
+    </div>
+    <div class="h2-hero">
+      <div class="h2-hero-main">
+        <h1>理论题库 · 训练与考试</h1>
+        <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
+      </div>
+      <div class="h2-nums" id="h2Nums"></div>
+    </div>
+    <div class="h2-note" id="h2Note"></div>
+    <div class="h2-grid" id="h2Grid"></div>
   </section>
 </template>
 
@@ -137,7 +158,6 @@
       <span class="tag gray" id="qModeTag"></span>
       <button class="btn btn-sm order-btn" data-act="order-toggle" id="btnOrder" title="切换出题顺序">顺序</button>
       <span class="qtop-spacer"></span>
-      <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
       <div class="qtop-actions">
         <button class="btn btn-sm drawer-btn" data-act="toggle-card">进度</button>
         <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
@@ -154,6 +174,7 @@
         <input id="jumpNo" type="text" inputmode="numeric" placeholder="题号 #850" spellcheck="false">
         <button class="btn btn-sm" data-act="jump-no">跳转</button>
       </div>
+      <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
     </div>
     <div class="quiz-body">
       <div class="q-card">

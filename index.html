@@ -458,6 +458,121 @@ select{
 }
 
 
+/* ================= v3.5 布局切换 + 新版首页（A 单列 / B 双栏） ================= */
+.layout-bar{display:flex;justify-content:flex-end;margin:-8px 0 10px}
+.layout-switch{
+  border:1px solid var(--line);background:#fff;color:var(--ink-2);
+  padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;
+  display:inline-flex;align-items:center;gap:6px;transition:.16s;
+}
+.layout-switch:hover{color:var(--brand);border-color:#c7d2fe;background:var(--brand-soft)}
+.layout-switch:after{content:"⇄";font-size:12px;opacity:.55}
+
+.h2-hero{
+  display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;
+  background:linear-gradient(120deg,#2b3fb8 0%,#3b5bdb 46%,#6d4bd8 100%);
+  color:#fff;border-radius:20px;padding:22px 26px;box-shadow:0 14px 32px rgba(43,63,184,.24);
+}
+.h2-hero-main{min-width:0;flex:1 1 300px}
+.h2-hero h1{margin:0 0 6px;font-size:21px;letter-spacing:.4px}
+.h2-hero p{margin:0;color:rgba(255,255,255,.8);font-size:12.5px}
+.h2-nums{display:flex;gap:20px;flex:none}
+.h2-num{text-align:center}
+.h2-num b{display:block;font-size:20px;line-height:1.22;font-variant-numeric:tabular-nums}
+.h2-num span{font-size:11px;color:rgba(255,255,255,.72);letter-spacing:.5px}
+
+.h2-note{
+  display:flex;align-items:center;gap:10px;margin-top:12px;
+  background:#eefaf3;border:1px solid #bbf7d0;color:#0f7a3d;
+  padding:8px 14px;border-radius:10px;font-size:12.3px;
+}
+.h2-note-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h2-note-more{flex:none;background:none;border:0;color:#0b6b34;font-size:12px;font-weight:600;text-decoration:underline;padding:0}
+
+.h2-grid{display:block;margin-top:18px}
+.h2-grid>.section-title{margin:22px 2px 12px}
+.h2-grid>.section-title:first-child{margin-top:2px}
+.h2-col{min-width:0}
+[data-layout="b"] .h2-grid{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);gap:20px;align-items:start}
+[data-layout="b"] .h2-col{display:flex;flex-direction:column;gap:14px}
+.h2-side-title{margin:0 0 -2px;font-size:14px;color:var(--ink-2);letter-spacing:.3px}
+
+.main-card{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px;
+  box-shadow:var(--shadow);display:grid;align-items:center;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) 152px;gap:22px;
+  position:relative;overflow:hidden;
+}
+.main-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--brand),#7c3aed)}
+.mc-left{min-width:0}
+.mc-left h3{margin:0 0 3px;font-size:19px}
+.mc-meta{margin:0 0 12px;color:var(--ink-3);font-size:12.5px}
+.mc-types{display:flex;gap:9px;flex-wrap:wrap}
+.mc-chip{background:#f8faff;border:1px solid #e3e9ff;border-radius:10px;padding:6px 11px;text-align:center;min-width:66px}
+.mc-chip b{display:block;font-size:16px;color:var(--brand);line-height:1.28;font-variant-numeric:tabular-nums}
+.mc-chip i{font-style:normal;font-size:11px;color:var(--ink-3)}
+.mc-mid{min-width:0}
+.mc-label{margin:0 0 10px;font-size:12.5px;color:var(--ink-2);font-weight:600;display:flex;align-items:baseline;gap:8px}
+.mc-label .mc-pct{margin-left:auto;color:var(--ink-3);font-weight:500;font-variant-numeric:tabular-nums}
+.mc-mid .pbar-row{margin-bottom:9px}
+.mc-mid .pbar-track{height:9px}
+.mc-right{display:flex;flex-direction:column;gap:9px}
+.mc-right .btn{width:100%}
+.mc-foot{
+  grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  border-top:1px dashed var(--line);padding-top:13px;
+}
+.mc-best{font-size:12px;color:var(--ok);font-weight:700;background:var(--ok-soft);padding:3px 9px;border-radius:999px}
+
+.tool-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+[data-layout="b"] .tool-cards{grid-template-columns:minmax(0,1fr);gap:10px}
+
+.custom-panel.compact{padding:16px 18px}
+.cp-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.cp-head h3{margin:0;font-size:15px}
+.cp-sub{color:var(--ink-3);font-size:12px}
+.custom-panel.compact .custom-row input{min-width:170px}
+.custom-panel.compact .desc{margin:10px 0 0;font-size:12px;color:var(--ink-3)}
+
+/* 结果页分批展开 */
+.more-btn{display:block;width:100%;margin-top:14px;border-style:dashed;padding:12px;color:var(--ink-2)}
+
+/* 答题页：计时器移到跳转栏 */
+.jump-bar .timer{margin-left:10px;font-size:14px;padding:5px 10px;box-shadow:none}
+
+/* 题型模块页：4 个模块一行 */
+.mod-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.mod-card{padding:16px 17px}
+.mod-name{font-size:15px}
+@media (max-width:1000px){.mod-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.mod-grid{grid-template-columns:1fr}}
+
+/* 移动端适配 */
+@media (max-width:900px){
+  .h2-hero{gap:14px;padding:18px 18px}
+  .h2-nums{gap:16px;width:100%;justify-content:space-between}
+  [data-layout="b"] .h2-grid{grid-template-columns:minmax(0,1fr)}
+  .main-card{grid-template-columns:minmax(0,1fr);gap:16px;padding:18px 18px}
+  .mc-right{flex-direction:row;flex-wrap:wrap}
+  .mc-right .btn{flex:1 1 120px;width:auto}
+  .tool-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .jump-bar .timer{margin-left:auto}
+}
+@media (max-width:560px){
+  .h2-hero h1{font-size:18px}
+  .h2-hero p{font-size:11.5px}
+  .h2-num b{font-size:17px}
+  .h2-note{align-items:flex-start;flex-wrap:wrap;padding:8px 12px}
+  .h2-note-text{white-space:normal;flex:1 1 100%}
+  .mc-chip{min-width:56px;padding:5px 8px}
+  .mc-right .btn{flex:1 1 100%}
+  .layout-bar{margin:-4px 0 8px}
+  .jump-bar{gap:8px}
+  .jump-bar .jump-input{margin-left:0}
+  .jump-bar .jump-input input{width:84px}
+  .jump-bar .timer{margin-left:auto}
+}
+
 </style>
 </head>
 <body>
@@ -481,9 +596,12 @@ select{
 <div class="toast" id="toast"></div>
 <div id="modalRoot"></div>
 
-<!-- ============ 首页 ============ -->
+<!-- ============ 首页 · 经典布局 ============ -->
 <template id="tpl-home">
   <section class="view-enter">
+    <div class="layout-bar">
+      <button class="layout-switch" data-act="layout-cycle"></button>
+    </div>
     <div class="hero">
       <h1>理论题库 · 训练与考试</h1>
       <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
@@ -520,6 +638,24 @@ select{
     <div class="mini-grid" id="miniGrid"></div>
     <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
     <div class="kpis" id="homeKpis"></div>
+  </section>
+</template>
+
+<!-- ============ 首页 · 新版（A 单列主操作区 / B 左右双栏，共用外壳） ============ -->
+<template id="tpl-home2">
+  <section class="view-enter">
+    <div class="layout-bar">
+      <button class="layout-switch" data-act="layout-cycle"></button>
+    </div>
+    <div class="h2-hero">
+      <div class="h2-hero-main">
+        <h1>理论题库 · 训练与考试</h1>
+        <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
+      </div>
+      <div class="h2-nums" id="h2Nums"></div>
+    </div>
+    <div class="h2-note" id="h2Note"></div>
+    <div class="h2-grid" id="h2Grid"></div>
   </section>
 </template>
 
@@ -588,7 +724,6 @@ select{
       <span class="tag gray" id="qModeTag"></span>
       <button class="btn btn-sm order-btn" data-act="order-toggle" id="btnOrder" title="切换出题顺序">顺序</button>
       <span class="qtop-spacer"></span>
-      <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
       <div class="qtop-actions">
         <button class="btn btn-sm drawer-btn" data-act="toggle-card">进度</button>
         <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
@@ -605,6 +740,7 @@ select{
         <input id="jumpNo" type="text" inputmode="numeric" placeholder="题号 #850" spellcheck="false">
         <button class="btn btn-sm" data-act="jump-no">跳转</button>
       </div>
+      <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
     </div>
     <div class="quiz-body">
       <div class="q-card">
@@ -1062,9 +1198,36 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   var pick = { pid: null, mode: 'exam' };
   var sess = null;
   var lastResult = null;
-  var revOnlyWrong = false;
+  var revOnlyWrong = true;   /* v3.5：默认只回顾错题，正确题按需展开（1445 题全量渲染会卡） */
+  var revShown = 60;
+  var REV_PAGE = 60;
   var tickTimer = null;
   var reviewH = null;
+
+  /* ---------------- 布局方案：classic（经典）/ a（主操作区）/ b（左右双栏） ---------------- */
+  var LAYOUTS = ['classic', 'a', 'b'];
+  var LAYOUT_NAME = { classic: '经典', a: '新版A', b: '新版B' };
+  var LAYOUT_DESC = {
+    classic: '经典布局：hero + 卷卡片网格',
+    a: '新版A：单卷满宽主操作区，主入口全部收进首屏',
+    b: '新版B：左侧主训练区 + 右侧工具栏，信息密度更高'
+  };
+  function layout() {
+    var v = db.settings && db.settings.layout;
+    return LAYOUTS.indexOf(v) >= 0 ? v : 'classic';
+  }
+  function applyLayoutAttr() {
+    document.body.setAttribute('data-layout', layout());
+  }
+  function cycleLayout() {
+    var i = LAYOUTS.indexOf(layout());
+    var next = LAYOUTS[(i + 1) % LAYOUTS.length];
+    (db.settings || (db.settings = {})).layout = next;
+    save();
+    applyLayoutAttr();
+    render();
+    toast('已切换到「' + LAYOUT_NAME[next] + '」布局');
+  }
 
   function cur() { return sess.qs[sess.idx]; }
 
@@ -1297,151 +1460,400 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   }
 
   /* ---------------- home ---------------- */
-  function viewHome() {
-    var node = cloneTpl('tpl-home');
-    var grid = $('#paperGrid', node);
-    var mini = $('#miniGrid', node);
-
-    PAPERS.forEach(function (p) {
-      var card = cloneTpl('tpl-paper-card');
-      var s = db.papers[p.id] ? pstate(p.id) : null;
-      $('.p-title', card).textContent = p.title;
-      $('.p-meta', card).textContent = p.questions.length + ' 题 · 满分 100';
-      var doneCount = s ? Object.keys(s.answers).length : 0;
-      var best = null;
-      db.history.forEach(function (h) {
-        if (h.pid === p.id && (!h.mod || h.mod === 'all') && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
-      });
-      $('.p-score', card).textContent = best === null ? '—' : String(best);
-      $('.p-done', card).textContent = String(doneCount);
-
-      var resume = $('.p-resume', card);
-      var recent = null, recentMod = null;
-      if (s && s.sessions) {
-        Object.keys(s.sessions).forEach(function (mod) {
-          var ms = s.sessions[mod];
-          if (!ms || ms.done || !ms.order) return;
-          if (!moduleAnswered(p.id, mod)) return;
-          if (!recent || (ms.at || 0) > (recent.at || 0)) { recent = ms; recentMod = mod; }
-        });
-      }
-      if (recent) {
-        resume.classList.remove('hidden');
-        resume.textContent = '继续：' + modLabel(recentMod) + ' · ' + (recent.mode === 'practice' ? '练习' : '考试') +
-          ' · ' + (recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, recentMod) + '/' + (recent.total || 0);
-        resume.addEventListener('click', function () { beginSession(p.id, recentMod, recent.mode || 'exam', {}); });
-      }
-      function startAll(mode) {
-        var st = pstate(p.id);
-        if (Object.keys(st.answers).length === 0) {
-          beginSession(p.id, 'all', mode, { fresh: true, random: false });
-          return;
-        }
-        showModal('本卷已有作答记录', '可以「继续做」保留本卷已答接着做，或「清空并开始」清空本卷全部已答答案与标记后重新做（错题本、收藏、历史成绩保留）。',
-          '清空并开始', function () {
-            clearPaperAnswers(p.id);
-            beginSession(p.id, 'all', mode, { fresh: true, random: false });
-          }, '取消', null,
-          { text: '继续做', onClick: function () {
-              var ms = st.sessions.all;
-              if (ms && ms.order && !ms.done) beginSession(p.id, 'all', mode, {});
-              else beginSession(p.id, 'all', mode, { fresh: true, random: false });
-            } });
-      }
-      $('.btn-primary', card).addEventListener('click', function () { startAll('exam'); });
-      $('[data-act="card-practice"]', card).addEventListener('click', function () { startAll('practice'); });
-      $('[data-act="card-mock"]', card).addEventListener('click', startMock);
-      $('[data-act="card-modules"]', card).addEventListener('click', function () { openPaper(p.id, pick.mode); });
-      grid.appendChild(card);
+  /* 单卷概览：已答 / 最高分 / 分题型进度 / 可继续的会话 */
+  function paperStats(p) {
+    var s = db.papers[p.id] ? pstate(p.id) : null;
+    var byType = {
+      single: { done: 0, total: 0 },
+      multi: { done: 0, total: 0 },
+      judge: { done: 0, total: 0 }
+    };
+    p.questions.forEach(function (q) {
+      byType[q.t].total++;
+      if (s && s.answers[q.key]) byType[q.t].done++;
     });
-
-    function miniCard(icon, cls, title, sub, fn) {
-      var c = el('div', 'mini-card');
-      c.appendChild(el('div', 'ico ' + cls, icon));
-      var box = el('div');
-      box.appendChild(el('h4', null, title));
-      box.appendChild(el('p', null, sub));
-      c.appendChild(box);
-      c.addEventListener('click', fn);
-      return c;
+    var done = s ? Object.keys(s.answers).length : 0;
+    var best = null;
+    db.history.forEach(function (h) {
+      if (h.pid === p.id && (!h.mod || h.mod === 'all') && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
+    });
+    var recent = null, recentMod = null;
+    if (s && s.sessions) {
+      Object.keys(s.sessions).forEach(function (mod) {
+        var ms = s.sessions[mod];
+        if (!ms || ms.done || !ms.order) return;
+        if (!moduleAnswered(p.id, mod)) return;
+        if (!recent || (ms.at || 0) > (recent.at || 0)) { recent = ms; recentMod = mod; }
+      });
     }
-    mini.appendChild(miniCard('🎲', '', '全库随机练习', '全库 ' + ALL.length + ' 题随机 · 不限时练完', function () {
-      startRandomExam();
-    }));
-    mini.appendChild(miniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
+    return {
+      p: p, done: done, total: p.questions.length, best: best,
+      byType: byType, recent: recent, recentMod: recentMod
+    };
+  }
+
+  /* 整卷开始；已有作答时弹「继续做 / 清空并开始 / 取消」 */
+  function startPaperAll(p, mode) {
+    var st = pstate(p.id);
+    if (Object.keys(st.answers).length === 0) {
+      beginSession(p.id, 'all', mode, { fresh: true, random: false });
+      return;
+    }
+    showModal('本卷已有作答记录', '可以「继续做」保留本卷已答接着做，或「清空并开始」清空本卷全部已答答案与标记后重新做（错题本、收藏、历史成绩保留）。',
+      '清空并开始', function () {
+        clearPaperAnswers(p.id);
+        beginSession(p.id, 'all', mode, { fresh: true, random: false });
+      }, '取消', null,
+      { text: '继续做', onClick: function () {
+          var ms = st.sessions.all;
+          if (ms && ms.order && !ms.done) beginSession(p.id, 'all', mode, {});
+          else beginSession(p.id, 'all', mode, { fresh: true, random: false });
+        } });
+  }
+
+  /* 模拟考试：随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟（临时会话，独立答案） */
+  function newMockExam() {
+    var qs = pickMock().map(function (q) {
+      return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
+    });
+    beginSet(qs, '模拟考试（100 题）', 'exam', false, true, 'mock');
+  }
+  function startMockExam() {
+    var t = db.temp;
+    if (t && t.key === 'mock' && t.order && t.order.length && Object.keys(t.answers || {}).length) {
+      showModal('模拟考试进行中', '上次模拟还有未交卷的作答（已答 ' + Object.keys(t.answers).length + ' 题）。可「继续做」接着考（计时按剩余时间），或「重新抽题」开始新的一次模拟。',
+        '继续做', function () { resumeTemp(); }, '取消', null,
+        { text: '重新抽题', onClick: newMockExam });
+      return;
+    }
+    newMockExam();
+  }
+
+  /* 自定义题库训练：题号/范围用「、」分隔，组卷后练习 */
+  function startCustomSet(raw) {
+    var nos = parseCustomNos(raw, MAXN);
+    if (!nos.length) { toast('请输入有效题号，如：1-50、850、1081'); return; }
+    var qs = nos.map(function (n) { return NMAP[n]; }).filter(Boolean);
+    beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true, 'custom');
+    toast('已组卷 ' + qs.length + ' 题，开始训练');
+  }
+
+  function makeMiniCard(icon, cls, title, sub, fn) {
+    var c = el('div', 'mini-card');
+    c.appendChild(el('div', 'ico ' + cls, icon));
+    var box = el('div');
+    box.appendChild(el('h4', null, title));
+    box.appendChild(el('p', null, sub));
+    c.appendChild(box);
+    c.addEventListener('click', fn);
+    return c;
+  }
+
+  /* 工具卡：四张。A 布局横排一行，B 布局竖排右栏 */
+  function buildToolCards() {
+    var wrap = el('div', 'tool-cards');
+    wrap.appendChild(makeMiniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
       route = 'wrong'; render();
     }));
-    mini.appendChild(miniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
+    wrap.appendChild(makeMiniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
       route = 'fav'; render();
     }));
-    mini.appendChild(miniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
-      route = 'history'; render();
-    }));
-    mini.appendChild(miniCard('📊', 'ok', '正确率统计', '按题型/知识点看正确率', function () {
+    wrap.appendChild(makeMiniCard('📊', 'ok', '正确率统计', '按题型 / 知识点看正确率', function () {
       route = 'stats'; render();
     }));
+    wrap.appendChild(makeMiniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答', function () {
+      route = 'history'; render();
+    }));
+    return wrap;
+  }
 
-    var heroBtn = $('[data-act="random-exam"]', node);
-    if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
-
-    // 断点续做：全库随机 / 自定义题库 中断的练习
-    if (db.temp && db.temp.order && db.temp.order.length && Object.keys(db.temp.answers || {}).length) {
-      var tr = el('button', 'btn temp-resume', '⏵ 继续：' + db.temp.title + ' · 已答 ' +
-        Object.keys(db.temp.answers).length + ' 题');
-      tr.addEventListener('click', function () { resumeTemp(); });
-      grid.parentNode.insertBefore(tr, grid.nextSibling);
-    }
-
-    // 模拟考试：随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟（临时会话，独立答案）
-    function newMock() {
-      var qs = pickMock().map(function (q) {
-        return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
-      });
-      beginSet(qs, '模拟考试（100 题）', 'exam', false, true, 'mock');
-    }
-    function startMock() {
-      var t = db.temp;
-      if (t && t.key === 'mock' && t.order && t.order.length && Object.keys(t.answers || {}).length) {
-        showModal('模拟考试进行中', '上次模拟还有未交卷的作答（已答 ' + Object.keys(t.answers).length + ' 题）。可「继续做」接着考（计时按剩余时间），或「重新抽题」开始新的一次模拟。',
-          '继续做', function () { resumeTemp(); }, '取消', null,
-          { text: '重新抽题', onClick: newMock });
-        return;
-      }
-      newMock();
-    }
-
-    // 自定义题库训练：题号/范围用「、」分隔，组卷后练习（交卷写入学习记录，支持断点续做）
-    function startCustom() {
-      var nos = parseCustomNos($('#customNos', node).value, MAXN);
-      if (!nos.length) { toast('请输入有效题号，如：1-50、850、1081'); return; }
-      var qs = nos.map(function (n) { return NMAP[n]; }).filter(Boolean);
-      beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true, 'custom');
-      toast('已组卷 ' + qs.length + ' 题，开始训练');
-    }
-    $('[data-act="custom-start"]', node).addEventListener('click', startCustom);
-    $('#customNos', node).addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); startCustom(); }
-    });
-
-    var kpis = $('#homeKpis', node);
+  function buildKpis() {
+    var kpis = el('div', 'kpis');
     var answered = 0;
-    PAPERS.forEach(function (p) { var s = db.papers[p.id]; if (s) answered += Object.keys(s.answers).length; });
+    PAPERS.forEach(function (p) {
+      var s = db.papers[p.id];
+      if (s) answered += Object.keys(s.answers).length;
+    });
     var avg = null;
     if (db.history.length) {
       var sum = 0, cnt = 0;
       db.history.forEach(function (h) { sum += h.score / (h.total || 100) * 100; cnt++; });
       avg = Math.round(sum / cnt);
     }
-    [['题库总量', ALL.length + ' 题'], ['累计作答', answered + ' 题'], ['历史平均分', avg === null ? '—' : avg], ['错题数量', Object.keys(db.wrong).length + ' 题']].forEach(function (x) {
+    [['题库总量', ALL.length + ' 题'], ['累计作答', answered + ' 题'],
+     ['历史平均分', avg === null ? '—' : avg], ['错题数量', Object.keys(db.wrong).length + ' 题']].forEach(function (x) {
       var k = cloneTpl('tpl-kpi');
       $('span', k).textContent = x[0];
       $('b', k).textContent = x[1];
       kpis.appendChild(k);
     });
+    return kpis;
+  }
+
+  /* 新版主操作卡：题量分布 / 按题型进度 / 竖排主按钮 */
+  function buildMainCard(p) {
+    var st = paperStats(p);
+    var card = el('article', 'main-card');
+
+    var left = el('div', 'mc-left');
+    left.appendChild(el('h3', null, '官方题库'));
+    left.appendChild(el('p', 'mc-meta', st.total + ' 题 · 满分 100 · 含知识点与解析'));
+    var chips = el('div', 'mc-types');
+    [['single', '单选'], ['multi', '多选'], ['judge', '判断']].forEach(function (t) {
+      var c = el('span', 'mc-chip');
+      c.appendChild(el('b', null, String(st.byType[t[0]].total)));
+      c.appendChild(el('i', null, t[1]));
+      chips.appendChild(c);
+    });
+    left.appendChild(chips);
+
+    var mid = el('div', 'mc-mid');
+    var midHead = el('p', 'mc-label', '按题型进度');
+    midHead.appendChild(el('span', 'mc-pct', st.done + ' / ' + st.total));
+    mid.appendChild(midHead);
+    ['single', 'multi', 'judge'].forEach(function (t) {
+      var bt = st.byType[t];
+      if (!bt.total) return;
+      var row = el('div', 'pbar-row');
+      row.appendChild(el('span', 'pbar-name', typeName(t)));
+      var track = el('span', 'pbar-track');
+      var fill = el('i');
+      fill.style.width = (bt.total ? Math.round(bt.done / bt.total * 100) : 0) + '%';
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el('span', 'pbar-num', bt.done + '/' + bt.total));
+      mid.appendChild(row);
+    });
+
+    var right = el('div', 'mc-right');
+    var bExam = el('button', 'btn btn-primary', '开始考试');
+    bExam.addEventListener('click', function () { startPaperAll(p, 'exam'); });
+    right.appendChild(bExam);
+    var bPrac = el('button', 'btn', '练习模式');
+    bPrac.addEventListener('click', function () { startPaperAll(p, 'practice'); });
+    right.appendChild(bPrac);
+    var bMock = el('button', 'btn', '模拟考试');
+    bMock.title = '随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟';
+    bMock.addEventListener('click', function () { startMockExam(); });
+    right.appendChild(bMock);
+
+    card.appendChild(left);
+    card.appendChild(mid);
+    card.appendChild(right);
+
+    var foot = el('div', 'mc-foot');
+    if (st.best !== null) foot.appendChild(el('span', 'mc-best', '最高分 ' + st.best));
+    var rnd = el('button', 'btn btn-sm btn-ghost', '🎲 全库随机');
+    rnd.addEventListener('click', function () { startRandomExam(); });
+    foot.appendChild(rnd);
+    if (st.recent) {
+      var r = el('button', 'btn btn-sm btn-ghost mc-resume',
+        '⏵ 继续：' + modLabel(st.recentMod) + ' · ' + (st.recent.mode === 'practice' ? '练习' : '考试') +
+        ' · ' + (st.recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, st.recentMod) + '/' + (st.recent.total || 0));
+      r.addEventListener('click', function () { beginSession(p.id, st.recentMod, st.recent.mode || 'exam', {}); });
+      foot.appendChild(r);
+    }
+    var mods = el('button', 'btn btn-sm btn-ghost', '按题型练习 →');
+    mods.addEventListener('click', function () { openPaper(p.id, pick.mode); });
+    foot.appendChild(mods);
+    card.appendChild(foot);
+
+    return card;
+  }
+
+  function buildCustomBox() {
+    var box = el('div', 'panel custom-panel compact');
+    var head = el('div', 'cp-head');
+    head.appendChild(el('h3', null, '自定义组卷'));
+    head.appendChild(el('span', 'cp-sub', '题号或范围，用「、」分隔'));
+    box.appendChild(head);
+    var row = el('div', 'custom-row');
+    var inp = el('input');
+    inp.id = 'customNos';
+    inp.spellcheck = false;
+    inp.placeholder = '例如：1-50、120、850-860、1081';
+    row.appendChild(inp);
+    var btn = el('button', 'btn btn-primary', '开始训练');
+    btn.addEventListener('click', function () { startCustomSet(inp.value); });
+    row.appendChild(btn);
+    box.appendChild(row);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); startCustomSet(inp.value); }
+    });
+    box.appendChild(el('p', 'desc', '题号即全局编号：单选 1-849、多选 850-1080、判断 1081-1445，无效题号自动忽略。'));
+    return box;
+  }
+
+  /* 断点续做条（全库随机 / 自定义 / 模拟考中断的练习） */
+  function buildTempResume() {
+    if (!(db.temp && db.temp.order && db.temp.order.length && Object.keys(db.temp.answers || {}).length)) return null;
+    var tr = el('button', 'btn temp-resume', '⏵ 继续：' + db.temp.title + ' · 已答 ' + Object.keys(db.temp.answers).length + ' 题');
+    tr.addEventListener('click', function () { resumeTemp(); });
+    return tr;
+  }
+
+  function paintLayoutBtn(node) {
+    var b = $('[data-act="layout-cycle"]', node);
+    if (!b) return;
+    b.textContent = '布局：' + LAYOUT_NAME[layout()];
+    b.title = LAYOUT_DESC[layout()] + '（点击切换）';
+    b.addEventListener('click', cycleLayout);
+  }
+
+  function viewHome() {
+    applyLayoutAttr();
+    return layout() === 'classic' ? viewHomeClassic() : viewHome2();
+  }
+
+  /* ---------- 经典布局（保持原样） ---------- */
+  function viewHomeClassic() {
+    var node = cloneTpl('tpl-home');
+    var grid = $('#paperGrid', node);
+    var mini = $('#miniGrid', node);
+
+    PAPERS.forEach(function (p) {
+      var card = cloneTpl('tpl-paper-card');
+      var st = paperStats(p);
+      $('.p-title', card).textContent = p.title;
+      $('.p-meta', card).textContent = st.total + ' 题 · 满分 100';
+      $('.p-score', card).textContent = st.best === null ? '—' : String(st.best);
+      $('.p-done', card).textContent = String(st.done);
+
+      var resume = $('.p-resume', card);
+      if (st.recent) {
+        resume.classList.remove('hidden');
+        resume.textContent = '继续：' + modLabel(st.recentMod) + ' · ' + (st.recent.mode === 'practice' ? '练习' : '考试') +
+          ' · ' + (st.recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, st.recentMod) + '/' + (st.recent.total || 0);
+        resume.addEventListener('click', function () { beginSession(p.id, st.recentMod, st.recent.mode || 'exam', {}); });
+      }
+      $('.btn-primary', card).addEventListener('click', function () { startPaperAll(p, 'exam'); });
+      $('[data-act="card-practice"]', card).addEventListener('click', function () { startPaperAll(p, 'practice'); });
+      $('[data-act="card-mock"]', card).addEventListener('click', function () { startMockExam(); });
+      $('[data-act="card-modules"]', card).addEventListener('click', function () { openPaper(p.id, pick.mode); });
+      grid.appendChild(card);
+    });
+
+    mini.appendChild(makeMiniCard('🎲', '', '全库随机练习', '全库 ' + ALL.length + ' 题随机 · 不限时练完', function () {
+      startRandomExam();
+    }));
+    mini.appendChild(makeMiniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
+      route = 'wrong'; render();
+    }));
+    mini.appendChild(makeMiniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
+      route = 'fav'; render();
+    }));
+    mini.appendChild(makeMiniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
+      route = 'history'; render();
+    }));
+    mini.appendChild(makeMiniCard('📊', 'ok', '正确率统计', '按题型/知识点看正确率', function () {
+      route = 'stats'; render();
+    }));
+
+    var heroBtn = $('[data-act="random-exam"]', node);
+    if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
+
+    var tr = buildTempResume();
+    if (tr) grid.parentNode.insertBefore(tr, grid.nextSibling);
+
+    var customBtn = $('[data-act="custom-start"]', node);
+    var customInput = $('#customNos', node);
+    customBtn.addEventListener('click', function () { startCustomSet(customInput.value); });
+    customInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); startCustomSet(customInput.value); }
+    });
+
+    var kpis = $('#homeKpis', node);
+    var tmpK = buildKpis();
+    while (tmpK.firstChild) kpis.appendChild(tmpK.firstChild);
 
     $('[data-act="random-exam"]', node).addEventListener('click', function () { startRandomExam(); });
     $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
     $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
+    paintLayoutBtn(node);
+    return node;
+  }
+
+  /* ---------- 新版布局（A 单列 / B 双栏，共用 DOM，靠 CSS 分流） ---------- */
+  function viewHome2() {
+    var node = cloneTpl('tpl-home2');
+    var L = layout();
+    var p = PAPERS[0];
+    var st = paperStats(p);
+
+    var nums = $('#h2Nums', node);
+    [['总题量', ALL.length], ['单选', st.byType.single.total], ['多选', st.byType.multi.total], ['判断', st.byType.judge.total]]
+      .forEach(function (x) {
+        var d = el('div', 'h2-num');
+        d.appendChild(el('b', null, String(x[1])));
+        d.appendChild(el('span', null, x[0]));
+        nums.appendChild(d);
+      });
+
+    var note = $('#h2Note', node);
+    note.appendChild(el('span', 'h2-note-text',
+      '官方题库已收录 ' + ALL.length + ' 题，答案提取自原文【答案】标注；如有更正可在「答案管理」粘贴覆盖。'));
+    var more = el('button', 'h2-note-more', '说明');
+    more.addEventListener('click', function () {
+      showModal('题库说明',
+        '本题库为 2026 年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库，共 ' + ALL.length +
+        ' 题（单选 ' + st.byType.single.total + ' / 多选 ' + st.byType.multi.total + ' / 判断 ' + st.byType.judge.total +
+        '），答案提取自题库原文的【答案】标注，部分题目附知识点与解析。' +
+        '若后续有官方更正，可在「答案管理」中粘贴覆盖，所有成绩与错题会按新答案重算。',
+        '知道了', null);
+    });
+    note.appendChild(more);
+
+    var grid = $('#h2Grid', node);
+    var main = buildMainCard(p);
+    var tools = buildToolCards();
+    var custom = buildCustomBox();
+
+    if (L === 'b') {
+      var colL = el('div', 'h2-col h2-col-l');
+      var colR = el('div', 'h2-col h2-col-r');
+      colL.appendChild(main);
+      var trB = buildTempResume();
+      if (trB) colL.appendChild(trB);
+      colL.appendChild(buildKpis());
+      colR.appendChild(el('h3', 'h2-side-title', '工具与自定义'));
+      colR.appendChild(tools);
+      colR.appendChild(custom);
+      grid.appendChild(colL);
+      grid.appendChild(colR);
+    } else {
+      var s1 = el('div', 'section-title');
+      s1.appendChild(el('h2', null, '开始训练'));
+      s1.appendChild(el('span', null, '整套训练 / 考试做完全部题，也可按题型专项练'));
+      grid.appendChild(s1);
+      grid.appendChild(main);
+      var trA = buildTempResume();
+      if (trA) grid.appendChild(trA);
+
+      var s2 = el('div', 'section-title');
+      s2.appendChild(el('h2', null, '专项与工具'));
+      s2.appendChild(el('span', null, '错题、收藏、统计与学习记录'));
+      grid.appendChild(s2);
+      grid.appendChild(tools);
+
+      var s3 = el('div', 'section-title');
+      s3.appendChild(el('h2', null, '自定义题库训练'));
+      s3.appendChild(el('span', null, '输入题号或范围，只练你想练的题'));
+      grid.appendChild(s3);
+      grid.appendChild(custom);
+
+      var s4 = el('div', 'section-title');
+      s4.appendChild(el('h2', null, '学习概况'));
+      var sw = el('span', null, '数据保存在本机浏览器 · ');
+      var lk = el('a', null, '查看学习记录 →');
+      lk.href = 'javascript:;';
+      lk.addEventListener('click', function () { route = 'history'; render(); });
+      sw.appendChild(lk);
+      s4.appendChild(sw);
+      grid.appendChild(s4);
+      grid.appendChild(buildKpis());
+    }
+
+    paintLayoutBtn(node);
     return node;
   }
 
@@ -1857,7 +2269,8 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       save();
     }
     lastResult = { sess: s, r: r, used: used };
-    revOnlyWrong = false;
+    revOnlyWrong = true;   /* 交卷后默认只看错题，正确题按需展开 */
+    revShown = REV_PAGE;
     route = 'result';
     render();
     if (auto) toast('时间到，已自动交卷');
@@ -1900,35 +2313,58 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
 
     var revBox = $('#review', node);
     var toggle = $('#revToggle', node);
-    function paintReview() {
-      revBox.innerHTML = '';
-      var list = s.qs.filter(function (q) {
+    /* 逐题回顾：默认只渲染错题；正确题按 60 条一批展开。
+       1445 题整卷全量渲染会产生一万多个 DOM 节点，交卷时明显卡顿。 */
+    function revSource() {
+      return s.qs.filter(function (q) {
         if (!revOnlyWrong) return true;
         var c = correctOf(q), a = s.answers[q.key] || '';
         return !c || a !== c;
       });
-      if (!list.length) { revBox.appendChild(el('div', 'empty', '没有需要回顾的题目 🎉')); return; }
-      list.forEach(function (q) {
-        var item = cloneTpl('tpl-review');
-        var c = correctOf(q), a = s.answers[q.key] || '';
-        var ok = c && a === c;
-        item.classList.toggle('bad', !ok);
-        $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('#' + q.n);
-        var tag = $('.tag', item);
-        tag.textContent = typeName(q.t);
-        tag.className = typeTagClass(q.t);
-        var badge = el('span', 'ans-badge ' + (ok ? 'ok' : (c ? 'bad' : 'mid')), ok ? '答对' : (c ? (a ? '答错' : '未作答') : '未收录答案'));
-        $('.badge-wrap', item).appendChild(badge);
-        $('.rs', item).textContent = q.q;
-        $('.ro-my span', item).textContent = a ? a.split('').join(' ') : '未作答';
-        $('.ro-ck span', item).textContent = c ? c.split('').join(' ') : '—';
-        if (q.an) item.appendChild(el('p', 'r-an', '📖 解析：' + q.an));
-        revBox.appendChild(item);
-      });
-      toggle.textContent = revOnlyWrong ? '显示全部' : '只看错题';
+    }
+    function revItem(q) {
+      var item = cloneTpl('tpl-review');
+      var c = correctOf(q), a = s.answers[q.key] || '';
+      var ok = c && a === c;
+      item.classList.toggle('bad', !ok);
+      $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('#' + q.n);
+      var tag = $('.tag', item);
+      tag.textContent = typeName(q.t);
+      tag.className = typeTagClass(q.t);
+      var badge = el('span', 'ans-badge ' + (ok ? 'ok' : (c ? 'bad' : 'mid')), ok ? '答对' : (c ? (a ? '答错' : '未作答') : '未收录答案'));
+      $('.badge-wrap', item).appendChild(badge);
+      $('.rs', item).textContent = q.q;
+      $('.ro-my span', item).textContent = a ? a.split('').join(' ') : '未作答';
+      $('.ro-ck span', item).textContent = c ? c.split('').join(' ') : '—';
+      if (q.an) item.appendChild(el('p', 'r-an', '📖 解析：' + q.an));
+      return item;
+    }
+    function paintReview() {
+      var list = revSource();
+      revBox.innerHTML = '';
+      if (!list.length) {
+        revBox.appendChild(el('div', 'empty', revOnlyWrong ? '本次没有错题，全部答对 🎉' : '本次没有可回顾的题目'));
+        toggle.textContent = revOnlyWrong ? ('显示全部（' + s.qs.length + ' 题）') : '只看错题';
+        return;
+      }
+      var frag = document.createDocumentFragment();
+      list.slice(0, revShown).forEach(function (q) { frag.appendChild(revItem(q)); });
+      revBox.appendChild(frag);
+      var rest = list.length - revShown;
+      if (rest > 0) {
+        var more = el('button', 'btn more-btn',
+          '再显示 ' + Math.min(REV_PAGE, rest) + ' 条（还有 ' + rest + ' 条）');
+        more.addEventListener('click', function () { revShown += REV_PAGE; paintReview(); });
+        revBox.appendChild(more);
+      }
+      toggle.textContent = revOnlyWrong ? ('显示全部（' + s.qs.length + ' 题）') : '只看错题';
     }
     paintReview();
-    toggle.addEventListener('click', function () { revOnlyWrong = !revOnlyWrong; paintReview(); });
+    toggle.addEventListener('click', function () {
+      revOnlyWrong = !revOnlyWrong;
+      revShown = REV_PAGE;
+      paintReview();
+    });
 
     $('[data-act="retry"]', node).addEventListener('click', function () {
       if (s.persist && s.pid) redoModule(s.pid, s.mod || 'all', s.mode, s.random);
@@ -2542,6 +2978,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   });
 
   /* ---------------- boot ---------------- */
+  applyLayoutAttr();
   if (!PAPERS.length) {
     app.appendChild(el('div', 'empty', '题库数据未加载，请检查 data/questions.js 是否存在'));
   } else {
