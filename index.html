@@ -156,6 +156,13 @@ a{color:var(--brand);text-decoration:none}
 .quiz-shell{padding-top:6px}
 .quiz-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .quiz-top .title{font-weight:700;font-size:16px}
+.jump-bar{display:flex;align-items:center;gap:10px;margin:-4px 0 14px;flex-wrap:wrap}
+.jump-bar .jump-types{display:flex;gap:8px;flex-wrap:wrap}
+.jump-bar .jt{padding:6px 12px;font-size:13px;color:var(--ink-2)}
+.jump-bar .jt.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.jump-bar .jump-input{display:flex;gap:6px;margin-left:auto}
+.jump-bar .jump-input input{width:92px;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
+.jump-bar .jump-input input:focus{border-color:var(--brand)}
 .qtop-spacer{flex:1}
 .qtop-actions{display:flex;gap:8px;align-items:center}
 .tag{
@@ -553,6 +560,17 @@ select{
       <div class="qtop-actions">
         <button class="btn btn-sm drawer-btn" data-act="toggle-card">答题卡</button>
         <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
+      </div>
+    </div>
+    <div class="jump-bar">
+      <div class="jump-types">
+        <button class="btn btn-sm jt" data-act="jump-type" data-type="single">单选题</button>
+        <button class="btn btn-sm jt" data-act="jump-type" data-type="multi">多选题</button>
+        <button class="btn btn-sm jt" data-act="jump-type" data-type="judge">判断题</button>
+      </div>
+      <div class="jump-input">
+        <input id="jumpNo" type="number" min="1" max="1445" placeholder="题号" inputmode="numeric">
+        <button class="btn btn-sm" data-act="jump-no">跳转</button>
       </div>
     </div>
     <div class="quiz-body">
@@ -1374,6 +1392,10 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
 
     function rebuildQuestion() {
       var q = cur();
+      // 跳转栏：当前题型按钮高亮
+      $all('.jt', node).forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-type') === q.t);
+      });
       opts.innerHTML = '';
       q.o.forEach(function (txt, i) {
         var o = cloneTpl('tpl-option');
@@ -1577,6 +1599,28 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     });
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
       $('#sideCard', node).classList.toggle('open');
+    });
+    // 跳转栏：一键切换题型（跳到该题型在本组题中的第一题）
+    $all('[data-act="jump-type"]', node).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-type');
+        var i = sess.qs.findIndex(function (x) { return x.t === t; });
+        if (i < 0) { toast('本次练习中没有' + typeLabel(t)); return; }
+        sess.idx = i; persistPos(); rebuildQuestion();
+      });
+    });
+    // 跳转栏：按题号跳转（按题库题号找，随机顺序下也能定位）
+    $('[data-act="jump-no"]', node).addEventListener('click', function () {
+      var inp = $('#jumpNo', node);
+      var no = parseInt(inp.value, 10);
+      if (!no) { toast('请输入题号'); return; }
+      var i = sess.qs.findIndex(function (x) { return x.n === no; });
+      if (i < 0) { toast('本次练习中没有第 ' + no + ' 题'); return; }
+      sess.idx = i; persistPos(); rebuildQuestion();
+      inp.value = '';
+    });
+    $('#jumpNo', node).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); $('[data-act="jump-no"]', node).click(); }
     });
     $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
     $('[data-act="exit"]', node).addEventListener('click', function () {

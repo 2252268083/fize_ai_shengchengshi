@@ -145,6 +145,13 @@ a{color:var(--brand);text-decoration:none}
 .quiz-shell{padding-top:6px}
 .quiz-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .quiz-top .title{font-weight:700;font-size:16px}
+.jump-bar{display:flex;align-items:center;gap:10px;margin:-4px 0 14px;flex-wrap:wrap}
+.jump-bar .jump-types{display:flex;gap:8px;flex-wrap:wrap}
+.jump-bar .jt{padding:6px 12px;font-size:13px;color:var(--ink-2)}
+.jump-bar .jt.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.jump-bar .jump-input{display:flex;gap:6px;margin-left:auto}
+.jump-bar .jump-input input{width:92px;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
+.jump-bar .jump-input input:focus{border-color:var(--brand)}
 .qtop-spacer{flex:1}
 .qtop-actions{display:flex;gap:8px;align-items:center}
 .tag{

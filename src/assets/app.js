@@ -619,6 +619,10 @@
 
     function rebuildQuestion() {
       var q = cur();
+      // 跳转栏：当前题型按钮高亮
+      $all('.jt', node).forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-type') === q.t);
+      });
       opts.innerHTML = '';
       q.o.forEach(function (txt, i) {
         var o = cloneTpl('tpl-option');
@@ -822,6 +826,28 @@
     });
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
       $('#sideCard', node).classList.toggle('open');
+    });
+    // 跳转栏：一键切换题型（跳到该题型在本组题中的第一题）
+    $all('[data-act="jump-type"]', node).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-type');
+        var i = sess.qs.findIndex(function (x) { return x.t === t; });
+        if (i < 0) { toast('本次练习中没有' + typeLabel(t)); return; }
+        sess.idx = i; persistPos(); rebuildQuestion();
+      });
+    });
+    // 跳转栏：按题号跳转（按题库题号找，随机顺序下也能定位）
+    $('[data-act="jump-no"]', node).addEventListener('click', function () {
+      var inp = $('#jumpNo', node);
+      var no = parseInt(inp.value, 10);
+      if (!no) { toast('请输入题号'); return; }
+      var i = sess.qs.findIndex(function (x) { return x.n === no; });
+      if (i < 0) { toast('本次练习中没有第 ' + no + ' 题'); return; }
+      sess.idx = i; persistPos(); rebuildQuestion();
+      inp.value = '';
+    });
+    $('#jumpNo', node).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); $('[data-act="jump-no"]', node).click(); }
     });
     $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
     $('[data-act="exit"]', node).addEventListener('click', function () {

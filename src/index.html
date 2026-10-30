@@ -130,6 +130,17 @@
         <button class="btn btn-primary btn-sm" data-act="submit">交卷</button>
       </div>
     </div>
+    <div class="jump-bar">
+      <div class="jump-types">
+        <button class="btn btn-sm jt" data-act="jump-type" data-type="single">单选题</button>
+        <button class="btn btn-sm jt" data-act="jump-type" data-type="multi">多选题</button>
+        <button class="btn btn-sm jt" data-act="jump-type" data-type="judge">判断题</button>
+      </div>
+      <div class="jump-input">
+        <input id="jumpNo" type="number" min="1" max="1445" placeholder="题号" inputmode="numeric">
+        <button class="btn btn-sm" data-act="jump-no">跳转</button>
+      </div>
+    </div>
     <div class="quiz-body">
       <div class="q-card">
         <div class="q-head">
