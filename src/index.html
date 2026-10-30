@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#3b5bdb">
-<title>人工智能训练师 · 理论自测练习</title>
-<meta name="description" content="2026 年广东省人工智能与机器人技能大赛（人工智能训练师赛项）三套线上自测卷练习，含官方答案、随机出题、错题本与学习记录。">
+<title>人工智能训练师 · 理论题库练习</title>
+<meta name="description" content="2026 年广东省人工智能与机器人技能大赛（人工智能训练师赛项）官方初赛理论题库练习，共 1445 题，含答案、知识点与解析、随机出题、错题本与学习记录。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233b5bdb'/%3E%3Ctext x='32' y='44' font-size='30' font-family='Arial,Helvetica,sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3EAI%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/app.css">
 </head>
@@ -34,24 +34,24 @@
 <template id="tpl-home">
   <section class="view-enter">
     <div class="hero">
-      <h1>理论自测 · 三套模拟卷</h1>
-      <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）考前练习</p>
+      <h1>理论题库 · 训练与考试</h1>
+      <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
       <div class="hero-chips">
-        <span class="chip">A / B / C 三套</span>
-        <span class="chip">每套 100 题</span>
-        <span class="chip">单选 60 · 多选 10 · 判断 30</span>
-        <span class="chip">限时 90 分钟</span>
+        <span class="chip">官方题库</span>
+        <span class="chip">共 1445 题</span>
+        <span class="chip">单选 849 · 多选 231 · 判断 365</span>
+        <span class="chip">含知识点与解析</span>
       </div>
       <div class="hero-actions">
-        <button class="btn btn-primary" data-act="random-exam">全库随机练习（300 题）</button>
+        <button class="btn btn-primary" data-act="random-exam">全库随机练习（1445 题）</button>
         <button class="btn btn-ghost" data-act="open-wrong">错题重练</button>
       </div>
     </div>
     <div class="notice ok" id="notice">
       <span>✅</span>
-      <div><b>答案已核对官方：</b>三套共 300 题的答案，均按问卷星交卷结果页逐题校准（2026-10-26），与官方判分一致。如考务组后续调整答案，可在「答案管理」中粘贴覆盖。</div>
+      <div><b>官方题库已收录：</b>单选 849 / 多选 231 / 判断 365，共 1445 题，答案提取自题库原文的【答案】标注（2026-10-27），部分题目附知识点与解析。如后续有官方更正，可在「答案管理」中粘贴覆盖。</div>
     </div>
-    <div class="section-title"><h2>选择试卷</h2><span>建议先做一套完整模拟，再针对性刷错题</span></div>
+    <div class="section-title"><h2>开始训练</h2><span>整套训练/考试做完全部题，也可按题型专项练</span></div>
     <div class="paper-grid" id="paperGrid"></div>
     <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
     <div class="mini-grid" id="miniGrid"></div>
@@ -63,7 +63,7 @@
 <template id="tpl-paper-card">
   <article class="paper-card">
     <h3><span class="dot"></span><span class="p-title"></span></h3>
-    <div class="meta">100 题 · 90 分钟 · 满分 100</div>
+    <div class="meta p-meta">1445 题 · 满分 100</div>
     <div class="stat">
       <div><b class="p-score">—</b><span>最高分</span></div>
       <div class="sep"></div>
@@ -286,11 +286,7 @@
         也支持 <b>1D</b>、<b>1、D</b> 或用逗号、分号分隔。保存后所有成绩、错题会按新答案重算。
       </p>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-        <select id="keyPaper">
-          <option value="A">自测卷 A</option>
-          <option value="B">自测卷 B</option>
-          <option value="C">自测卷 C</option>
-        </select>
+        <select id="keyPaper"></select>
         <button class="btn btn-sm" data-act="key-load">载入当前答案</button>
         <button class="btn btn-sm" data-act="key-reset">恢复默认答案</button>
         <span class="hint" id="keyStat"></span>

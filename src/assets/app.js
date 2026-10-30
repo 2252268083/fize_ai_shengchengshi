@@ -6,7 +6,9 @@
   var KEY = window.ANSWER_KEY || {};
   var META = window.ANSWER_META || {};
   var EXAM_SECONDS = 90 * 60;
-  var LS = 'aitp.v1';
+  /* v3 起为单题库模式（pid=T，1445 题），与旧 A/B/C 进度的 key 不兼容，
+     存储升为 aitp.v2 独立起存；旧进度仍保留在 localStorage 的 aitp.v1 中，不自动删除 */
+  var LS = 'aitp.v2';
 
   var ALL = [];
   var BY_ID = {};
@@ -172,7 +174,8 @@
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function fmtClock(sec) {
     sec = Math.max(0, Math.floor(sec));
-    var m = Math.floor(sec / 60), s = sec % 60;
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    if (h > 0) return h + ':' + pad2(m) + ':' + pad2(s);
     return pad2(m) + ':' + pad2(s);
   }
   function fmtUsed(sec) {
@@ -440,6 +443,7 @@
       var card = cloneTpl('tpl-paper-card');
       var s = db.papers[p.id] ? pstate(p.id) : null;
       $('.p-title', card).textContent = p.title;
+      $('.p-meta', card).textContent = p.questions.length + ' 题 · 满分 100';
       var doneCount = s ? Object.keys(s.answers).length : 0;
       var best = null;
       db.history.forEach(function (h) {
@@ -497,7 +501,7 @@
       c.addEventListener('click', fn);
       return c;
     }
-    mini.appendChild(miniCard('🎲', '', '全库随机练习', '三套卷全部 300 题随机 · 不限时练完', function () {
+    mini.appendChild(miniCard('🎲', '', '全库随机练习', '全库 ' + ALL.length + ' 题随机 · 不限时练完', function () {
       startRandomExam();
     }));
     mini.appendChild(miniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
@@ -509,6 +513,9 @@
     mini.appendChild(miniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
       route = 'history'; render();
     }));
+
+    var heroBtn = $('[data-act="random-exam"]', node);
+    if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
 
     var kpis = $('#homeKpis', node);
     var answered = 0;
@@ -536,7 +543,7 @@
     var picks = shuffle(ALL.slice()).map(function (q) {
       return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
     });
-    beginSet(picks, '全库随机练习（300 题）', 'practice', false, true);
+    beginSet(picks, '全库随机练习（' + ALL.length + ' 题）', 'practice', false, true);
   }
 
   /* ---------------- paper modules ---------------- */
@@ -743,10 +750,11 @@
         box.classList.add('unknown');
         box.textContent = '本题尚未收录参考答案，可在「答案管理」中补充。';
       } else if (a === c) {
-        box.textContent = '✓ 回答正确';
+        box.textContent = '✓ 回答正确' + (q.an ? '　📖 ' + q.an : '');
       } else {
         box.classList.add('bad');
         var txt = '✗ 回答错误，正确答案：' + c.split('').join(' ');
+        if (q.an) txt += '　📖 解析：' + q.an;
         box.textContent = txt;
       }
     }
@@ -927,7 +935,7 @@
         var c = correctOf(q), a = s.answers[q.key] || '';
         var ok = c && a === c;
         item.classList.toggle('bad', !ok);
-        $('.no', item).textContent = q.pid + ' 卷 第 ' + q.n + ' 题';
+        $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('第 ' + q.n + ' 题');
         var tag = $('.tag', item);
         tag.textContent = typeName(q.t);
         tag.className = typeTagClass(q.t);
@@ -936,6 +944,7 @@
         $('.rs', item).textContent = q.q;
         $('.ro-my span', item).textContent = a ? a.split('').join(' ') : '未作答';
         $('.ro-ck span', item).textContent = c ? c.split('').join(' ') : '—';
+        if (q.an) item.appendChild(el('p', 'r-an', '📖 解析：' + q.an));
         revBox.appendChild(item);
       });
       toggle.textContent = revOnlyWrong ? '显示全部' : '只看错题';
@@ -1210,6 +1219,15 @@
     var sel = $('#keyPaper', node);
     var ta = $('#keyText', node);
 
+    // 动态生成卷别选项（单题库模式下只有一个「理论题库」）
+    sel.innerHTML = '';
+    PAPERS.forEach(function (p) {
+      var op = document.createElement('option');
+      op.value = p.id;
+      op.textContent = p.title + '（' + p.questions.length + ' 题）';
+      sel.appendChild(op);
+    });
+
     function refresh() {
       var pid = sel.value;
       ta.value = keyText(pid);
@@ -1222,7 +1240,7 @@
     $('[data-act="key-load"]', node).addEventListener('click', refresh);
     $('[data-act="key-reset"]', node).addEventListener('click', function () {
       var pid = sel.value;
-      showModal('恢复默认答案？', '将清除你在 ' + pid + ' 卷手动修改的答案。', '恢复', function () {
+      showModal('恢复默认答案？', '将清除你在「' + (BY_ID[pid] ? BY_ID[pid].title : pid) + '」手动修改的答案。', '恢复', function () {
         delete db.overrides[pid]; save(); refresh(); toast('已恢复默认答案');
       });
     });
@@ -1235,7 +1253,7 @@
       raw.split(/\r?\n/).forEach(function (line) {
         var t = line.trim();
         if (!t) return;
-        var m = t.match(/^(\d{1,3})\s*[\.:：\-]?\s*([A-Ha-h]+)$/) || t.match(/^(\d{1,3})\s+([A-Ha-h\s]+)$/);
+        var m = t.match(/^(\d{1,4})\s*[\.:：\-]?\s*([A-Ha-h]+)$/) || t.match(/^(\d{1,4})\s+([A-Ha-h\s]+)$/);
         if (!m) { bad++; return; }
         var no = parseInt(m[1], 10);
         var ans = sortedLetters(m[2].replace(/\s/g, ''));
@@ -1277,7 +1295,7 @@
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
     });
     $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
-      showModal('重置全部进度？', '将清空三套卷的作答记录、错题本、收藏与历史成绩（答案修改也会清除）。', '全部清空', function () {
+      showModal('重置全部进度？', '将清空题库的作答记录、错题本、收藏与历史成绩（答案修改也会清除）。', '全部清空', function () {
         db.papers = {}; db.wrong = {}; db.fav = {}; db.history = []; db.overrides = {};
         save(); lastResult = null; refresh(); toast('已重置');
       });
