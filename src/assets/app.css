@@ -156,6 +156,14 @@ a{color:var(--brand);text-decoration:none}
 .custom-row{display:flex;gap:10px;flex-wrap:wrap}
 .custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
 .custom-row input:focus{border-color:var(--brand)}
+.temp-resume{margin:-4px 0 18px;width:100%;text-align:left;background:var(--brand-soft);border:1.5px dashed var(--brand-2);color:var(--brand);font-weight:600}
+.stat-block{display:flex;flex-direction:column;gap:8px;margin:10px 0 20px}
+.stat-row{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.stat-row .stat-name{flex:0 0 200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat-row .stat-bar{flex:1;height:10px;border-radius:6px;background:var(--line);overflow:hidden;min-width:60px}
+.stat-row .stat-bar i{display:block;height:100%;border-radius:6px}
+.stat-row .stat-n{flex:0 0 76px;text-align:right;color:var(--ink-3);font-size:12.5px}
+@media (max-width:600px){.stat-row .stat-name{flex-basis:110px}}
 .qtop-spacer{flex:1}
 .qtop-actions{display:flex;gap:8px;align-items:center}
 .tag{

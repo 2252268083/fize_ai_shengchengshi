@@ -109,10 +109,17 @@
 
   function moduleQuestions(p, mod) {
     if (mod === 'all') return p.questions.slice();
+    if (mod === 'mock' || mod === 'random') {
+      /* 模拟考试 / 全库随机：题目列表存在模块会话的 order 里 */
+      var mstate = pstate(p.id).sessions[mod];
+      return (mstate && mstate.order) ? mstate.order.map(function (k) { return QMAP[k]; }).filter(Boolean) : [];
+    }
     return p.questions.filter(function (q) { return q.t === mod; });
   }
 
   function modLabel(mod) {
+    if (mod === 'mock') return '模拟考试';
+    if (mod === 'random') return '全库随机';
     return mod === 'all' ? '整套模拟' : typeLabel(mod);
   }
 
@@ -316,16 +323,17 @@
     enterQuiz(pid, mod, mode, st, ms, list);
   }
 
-  function beginSet(qs, title, mode, random, persistOpt) {
+  function beginSet(qs, title, mode, random, persistOpt, tempKey) {
     if (random) shuffle(qs);
     sess = {
       pid: null, mod: null, title: title, mode: mode, qs: qs,
       answers: {}, flags: {}, idx: 0, st: null, ms: null,
-      persist: !!persistOpt, startAt: Date.now(), pending: {},
+      persist: !!persistOpt, tempKey: tempKey || null, startAt: Date.now(), pending: {},
       deadline: mode === 'exam' ? Date.now() + Math.max(600, qs.length * 54) * 1000 : 0,
       limit: Math.max(600, qs.length * 54), done: false,
       random: !!random
     };
+    if (tempKey) { db.temp = null; save(); }  /* 新题组替换旧断点 */
     route = 'quiz';
     render();
   }
@@ -365,6 +373,34 @@
 
   function persistPos() {
     if (sess && sess.persist && sess.ms) { sess.ms.idx = sess.idx; sess.ms.at = Date.now(); save(); }
+    if (sess && sess.tempKey) {
+      /* 临时题组（全库随机/自定义题库）断点：存到 db.temp，首页可继续 */
+      db.temp = {
+        key: sess.tempKey, title: sess.title, mode: sess.mode,
+        order: sess.qs.map(function (q) { return q.key; }), idx: sess.idx,
+        answers: sess.answers, flags: sess.flags, deadline: sess.deadline || 0,
+        random: !!sess.random, at: Date.now()
+      };
+      save();
+    }
+  }
+
+  /* 恢复临时题组（全库随机/自定义题库）的断点 */
+  function resumeTemp() {
+    var t = db.temp;
+    if (!t || !t.order || !t.order.length) { toast('没有可恢复的练习'); return; }
+    var qs = t.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+    if (!qs.length) { db.temp = null; save(); toast('题目已失效，请重新开始'); return; }
+    sess = {
+      pid: null, mod: null, title: t.title, mode: t.mode || 'practice', qs: qs,
+      answers: t.answers || {}, flags: t.flags || {},
+      idx: Math.min(t.idx || 0, qs.length - 1), st: null, ms: null,
+      persist: true, tempKey: t.key, startAt: Date.now(), pending: {},
+      deadline: t.deadline || 0, limit: examLimit(qs.length), done: false, random: !!t.random
+    };
+    route = 'quiz';
+    render();
+    toast('已恢复上次进度');
   }
 
   /* ---------------- scoring ---------------- */
@@ -426,6 +462,7 @@
     else if (route === 'fav') node = viewList('fav');
     else if (route === 'review') node = viewReview();
     else if (route === 'history') node = viewHistory();
+    else if (route === 'stats') node = viewStats();
     else if (route === 'paper') node = viewPaper();
     else node = viewKey();
 
@@ -503,6 +540,7 @@
       }
       $('.btn-primary', card).addEventListener('click', function () { startAll('exam'); });
       $('[data-act="card-practice"]', card).addEventListener('click', function () { startAll('practice'); });
+      $('[data-act="card-mock"]', card).addEventListener('click', startMock);
       $('[data-act="card-modules"]', card).addEventListener('click', function () { openPaper(p.id, pick.mode); });
       grid.appendChild(card);
     });
@@ -529,16 +567,52 @@
     mini.appendChild(miniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
       route = 'history'; render();
     }));
+    mini.appendChild(miniCard('📊', 'ok', '正确率统计', '按题型/知识点看正确率', function () {
+      route = 'stats'; render();
+    }));
 
     var heroBtn = $('[data-act="random-exam"]', node);
     if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
 
-    // 自定义题库训练：题号/范围用「、」分隔，组卷后练习（交卷写入学习记录）
+    // 断点续做：全库随机 / 自定义题库 中断的练习
+    if (db.temp && db.temp.order && db.temp.order.length && Object.keys(db.temp.answers || {}).length) {
+      var tr = el('button', 'btn temp-resume', '⏵ 继续：' + db.temp.title + ' · 已答 ' +
+        Object.keys(db.temp.answers).length + ' 题');
+      tr.addEventListener('click', function () { resumeTemp(); });
+      grid.parentNode.insertBefore(tr, grid.nextSibling);
+    }
+
+    // 模拟考试：随机 60 单选 + 10 多选 + 30 判断，90 分钟（还原初赛节奏）
+    var paper0 = PAPERS[0];
+    function newMock() {
+      var ms = modState(paper0.id, 'mock');
+      clearModuleAnswers(paper0, 'mock');
+      var qs = pickMock();
+      ms.order = qs.map(function (q) { return q.key; });
+      ms.total = qs.length; ms.idx = 0; ms.done = false; ms.score = null; ms.used = 0;
+      ms.mode = 'exam'; ms.random = false;
+      ms.deadline = Date.now() + examLimit(qs.length) * 1000;
+      ms.at = Date.now();
+      save();
+      beginSession(paper0.id, 'mock', 'exam', {});
+    }
+    function startMock() {
+      var ms = pstate(paper0.id).sessions.mock;
+      if (ms && ms.order && !ms.done && moduleAnswered(paper0.id, 'mock') > 0) {
+        showModal('模拟考试进行中', '上次模拟还有未交卷的作答（已答 ' + moduleAnswered(paper0.id, 'mock') + ' 题）。可「继续做」接着考（计时按剩余时间），或「重新抽题」开始新的一次模拟。',
+          '继续做', function () { beginSession(paper0.id, 'mock', 'exam', {}); }, '取消', null,
+          { text: '重新抽题', onClick: newMock });
+        return;
+      }
+      newMock();
+    }
+
+    // 自定义题库训练：题号/范围用「、」分隔，组卷后练习（交卷写入学习记录，支持断点续做）
     function startCustom() {
       var nos = parseCustomNos($('#customNos', node).value, MAXN);
       if (!nos.length) { toast('请输入有效题号，如：1-50、850、1081'); return; }
       var qs = nos.map(function (n) { return NMAP[n]; }).filter(Boolean);
-      beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true);
+      beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true, 'custom');
       toast('已组卷 ' + qs.length + ' 题，开始训练');
     }
     $('[data-act="custom-start"]', node).addEventListener('click', startCustom);
@@ -585,11 +659,30 @@
     return Object.keys(out).map(Number).sort(function (x, y) { return x - y; });
   }
 
+  /* 模拟考试抽题：60 单选 + 10 多选 + 30 判断，按题型顺序拼接 */
+  function pickMock() {
+    var by = { single: [], multi: [], judge: [] };
+    ALL.forEach(function (q) { by[q.t].push(q); });
+    shuffle(by.single); shuffle(by.multi); shuffle(by.judge);
+    return by.single.slice(0, 60).concat(by.multi.slice(0, 10), by.judge.slice(0, 30));
+  }
+
   function startRandomExam() {
+    var t = db.temp;
+    if (t && t.key === 'random' && t.order && t.order.length && Object.keys(t.answers || {}).length) {
+      showModal('上次全库随机未完成', '检测到中断的全库随机练习（已答 ' + Object.keys(t.answers).length + ' 题）。可「继续做」接着练，或「重新抽题」重新开始。',
+        '继续做', function () { resumeTemp(); }, '取消', null,
+        { text: '重新抽题', onClick: newRandom });
+      return;
+    }
+    newRandom();
+  }
+
+  function newRandom() {
     var picks = shuffle(ALL.slice()).map(function (q) {
       return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
     });
-    beginSet(picks, '全库随机练习（' + ALL.length + ' 题）', 'practice', false, true);
+    beginSet(picks, '全库随机练习（' + ALL.length + ' 题）', 'practice', false, true, 'random');
   }
 
   /* ---------------- paper modules ---------------- */
@@ -954,9 +1047,11 @@
       s.qs.forEach(function (q) { if (s.answers[q.key]) snap[q.key] = s.answers[q.key]; });
       db.history.push({
         pid: s.pid, mod: s.mod || null, mode: s.mode, score: r.score, total: r.total,
-        at: Date.now(), used: Math.round(used), random: !!s.random, snap: snap
+        at: Date.now(), used: Math.round(used), random: !!s.random, snap: snap,
+        label: s.title
       });
       if (db.history.length > 200) db.history = db.history.slice(-200);
+      if (s.tempKey) db.temp = null;  /* 交卷后清除断点 */
       save();
     }
     lastResult = { sess: s, r: r, used: used };
@@ -1046,6 +1141,40 @@
     return node;
   }
 
+  /* 生成可打印 / 可存 Word 的题目列表 HTML（错题本、收藏导出用） */
+  function escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function buildListHtml(kind, qs) {
+    var title = kind === 'wrong' ? '错题本' : '我的收藏';
+    var rows = qs.map(function (q) {
+      var c = correctOf(q);
+      var opts = q.o.map(function (o, j) {
+        var L = letterAt(j);
+        var mark = c && c.indexOf(L) >= 0 ? ' <b style="color:green">✓</b>' : '';
+        return '<p style="margin:2px 0 2px 1em">' + L + '．' + escHtml(o) + mark + '</p>';
+      }).join('');
+      return '<div style="margin:0 0 16px;page-break-inside:avoid">' +
+        '<p style="margin:0"><b>#' + q.n + '（' + typeName(q.t) + '）</b>　' + escHtml(q.q) + '</p>' +
+        opts +
+        '<p style="margin:4px 0 0;color:green">答案：' + escHtml(c || '—') +
+        (q.kp ? '　｜　知识点：' + escHtml(q.kp) : '') + '</p>' +
+        (q.an ? '<p style="margin:2px 0 0;color:#555">解析：' + escHtml(q.an) + '</p>' : '') +
+        '</div>';
+    }).join('');
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title></head>' +
+      '<body style="font-family:\'Microsoft YaHei\',sans-serif;font-size:12pt;line-height:1.7;max-width:800px;margin:0 auto">' +
+      '<h2>' + title + '（' + qs.length + ' 题）· 人工智能训练师理论题库</h2>' + rows + '</body></html>';
+  }
+  function downloadBlob(content, mime, filename) {
+    var blob = new Blob([content], { type: mime });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  }
+
   /* ---------------- lists ---------------- */
   function viewList(kind) {
     var node = cloneTpl('tpl-list');
@@ -1081,8 +1210,8 @@
       items.forEach(function (h) {
         var row = el('div', 'row');
         var left = el('div', 'grow');
-        left.appendChild(el('div', 'qtext', (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
-          ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习')));
+        left.appendChild(el('div', 'qtext', h.label || ((h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
+          ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习'))));
         left.appendChild(el('div', 'qsub', fmtDate(h.at) + ' · 得分 ' + h.score + '/' + (h.total || 100) +
           ' · 用时 ' + fmtUsed(h.used || 0) + (h.random ? ' · 随机' : '')));
         row.appendChild(left);
@@ -1168,6 +1297,27 @@
       if (!qs.length) { toast('列表是空的'); return; }
       beginSet(qs, title + ' · 重练', 'practice');
     });
+    /* 打印 / 导出 Word（按当前筛选的列表） */
+    var bPrint = el('button', 'btn', '🖨 打印');
+    bPrint.addEventListener('click', function () {
+      var qs = visibleQs();
+      if (!qs.length) { toast('列表是空的'); return; }
+      var w = window.open('', '_blank');
+      if (!w) { toast('浏览器拦截了弹窗，请允许弹窗后重试'); return; }
+      w.document.write(buildListHtml(kind, qs));
+      w.document.close();
+      w.focus();
+      setTimeout(function () { w.print(); }, 300);
+    });
+    var bWord = el('button', 'btn', '⬇ 导出 Word');
+    bWord.addEventListener('click', function () {
+      var qs = visibleQs();
+      if (!qs.length) { toast('列表是空的'); return; }
+      downloadBlob('\ufeff' + buildListHtml(kind, qs), 'application/msword', title + '_' + qs.length + '题.doc');
+      toast('已导出 ' + qs.length + ' 题（.doc 可用 Word/WPS 打开）');
+    });
+    $('#listOps', node).appendChild(bPrint);
+    $('#listOps', node).appendChild(bWord);
     $('[data-act="list-clear"]', node).addEventListener('click', function () {
       if (!allQs().length) return;
       showModal('清空' + title + '？', '该操作不可撤销。', '清空', function () {
@@ -1189,10 +1339,10 @@
     var d = new Date(h.at || Date.now());
     var dateStr = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
       ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-    desc.textContent = (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') + ' · ' +
+    desc.textContent = h.label || ((h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') + ' · ' +
       (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习') + ' · ' +
       dateStr + ' · 得分 ' + h.score + '/' + (h.total || 100) + ' · 用时 ' + fmtUsed(h.used || 0) +
-      (h.random ? ' · 随机' : '');
+      (h.random ? ' · 随机' : ''));
     var keys = wrongKeysOf(h);
 
     var ops = el('div', 'filter-row');
@@ -1250,8 +1400,8 @@
       var d = new Date(h.at);
       var dateStr = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
         ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-      $('.his-title', row).textContent = (h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
-        ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习');
+      $('.his-title', row).textContent = h.label || ((h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
+        ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习'));
       var meta = dateStr + ' · 用时 ' + fmtUsed(h.used || 0);
       if (h.random) meta += ' · 随机';
       if (!h.snap) meta += ' · 旧记录(改答案后不重算)';
@@ -1282,6 +1432,74 @@
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
     });
+    return node;
+  }
+
+  /* ---------------- 正确率统计（按题型 / 知识点） ---------------- */
+  function statData() {
+    var byType = { single: [0, 0], multi: [0, 0], judge: [0, 0] };
+    var byKp = {};
+    var wrongKs = {};
+    db.history.forEach(function (h) {
+      if (!h.snap) return;
+      Object.keys(h.snap).forEach(function (k) {
+        var q = QMAP[k];
+        if (!q) return;
+        var ok = h.snap[k] === correctOf(q);
+        var c = byType[q.t]; c[0] += ok ? 1 : 0; c[1]++;
+        if (q.kp) {
+          var kc = byKp[q.kp] || (byKp[q.kp] = [0, 0]);
+          kc[0] += ok ? 1 : 0; kc[1]++;
+        }
+        if (!ok) wrongKs[q.key] = true;
+      });
+    });
+    return { byType: byType, byKp: byKp, wrongCount: Object.keys(wrongKs).length };
+  }
+
+  function statRowHtml(name, ok, total) {
+    var pct = total ? Math.round(ok / total * 100) : 0;
+    var color = pct >= 80 ? 'var(--ok)' : pct >= 60 ? '#d97706' : 'var(--bad)';
+    return '<div class="stat-row"><span class="stat-name">' + escHtml(name) + '</span>' +
+      '<span class="stat-bar"><i style="width:' + pct + '%;background:' + color + '"></i></span>' +
+      '<b style="color:' + color + '">' + pct + '%</b>' +
+      '<span class="stat-n">' + ok + '/' + total + ' 题</span></div>';
+  }
+
+  function viewStats() {
+    var d = statData();
+    var node = cloneTpl('tpl-panel-view');
+    $('h2', node).textContent = '正确率统计';
+    var totalN = d.byType.single[1] + d.byType.multi[1] + d.byType.judge[1];
+    var okN = d.byType.single[0] + d.byType.multi[0] + d.byType.judge[0];
+    $('.desc', node).innerHTML = '基于全部学习记录（含答题快照）按当前答案计算。累计作答 <b>' + totalN +
+      '</b> 次，答对 <b>' + okN + '</b> 次，总体正确率 <b>' + (totalN ? Math.round(okN / totalN * 100) : 0) +
+      '%</b>；涉及 <b>' + d.wrongCount + '</b> 道答错过的题（可在错题本重练）。';
+
+    var box = $('#statsBody', node);
+    box.appendChild(el('h3', null, '按题型'));
+    var wrap = el('div', 'stat-block');
+    wrap.innerHTML = [['single', '单选题'], ['multi', '多选题'], ['judge', '判断题']].map(function (x) {
+      var c = d.byType[x[0]];
+      return statRowHtml(x[1], c[0], c[1]);
+    }).join('');
+    box.appendChild(wrap);
+
+    box.appendChild(el('h3', null, '按知识点（错误率高的在前）'));
+    var kps = Object.keys(d.byKp).map(function (k) {
+      return { name: k, ok: d.byKp[k][0], total: d.byKp[k][1] };
+    }).filter(function (x) { return x.total >= 3; })
+      .sort(function (a, b) { return (a.ok / a.total) - (b.ok / b.total) || b.total - a.total; });
+    if (!kps.length) {
+      box.appendChild(el('div', 'empty', '还没有足够的数据（作答几次后这里会显示各知识点的正确率）'));
+    } else {
+      var kwrap = el('div', 'stat-block');
+      kwrap.innerHTML = kps.map(function (x) { return statRowHtml(x.name, x.ok, x.total); }).join('');
+      box.appendChild(kwrap);
+      var hint = el('p', 'desc', '共统计 ' + kps.length + ' 个知识点（至少作答 3 次才显示）。正确率低的知识点建议优先复习，可在「自定义题库训练」中针对练习。');
+      hint.style.marginTop = '10px';
+      box.appendChild(hint);
+    }
     return node;
   }
 
@@ -1374,6 +1592,45 @@
       a.download = '答案导出.json';
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    });
+    $('[data-act="db-export"]', node).addEventListener('click', function () {
+      var d = new Date();
+      var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
+      downloadBlob(JSON.stringify(db, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
+      toast('已导出全部进度（作答、错题、收藏、历史记录）');
+    });
+    $('[data-act="db-import"]', node).addEventListener('click', function () {
+      var inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.json,application/json';
+      inp.addEventListener('change', function () {
+        var f = inp.files && inp.files[0];
+        if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () {
+          var data;
+          try { data = JSON.parse(String(rd.result)); } catch (e) { toast('文件解析失败，请检查 JSON 格式'); return; }
+          if (!data || typeof data !== 'object' || !data.papers || !data.history) {
+            toast('这不是有效的进度备份文件'); return;
+          }
+          showModal('恢复备份？', '将用备份文件覆盖当前全部进度（作答、错题、收藏、历史记录、答案修改），当前数据会被替换且不可恢复。',
+            '覆盖恢复', function () {
+              db = {
+                papers: data.papers || {}, wrong: data.wrong || {}, fav: data.fav || {},
+                overrides: data.overrides || {}, history: data.history || [], settings: data.settings || {}
+              };
+              if (data.temp) db.temp = data.temp;
+              memOnly = false;
+              save();
+              lastResult = null;
+              route = 'home';
+              render();
+              toast('进度已恢复（' + db.history.length + ' 条学习记录）');
+            });
+        };
+        rd.readAsText(f, 'utf-8');
+      });
+      inp.click();
     });
     $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
       showModal('重置全部进度？', '将清空题库的作答记录、错题本、收藏与历史成绩（答案修改也会清除）。', '全部清空', function () {

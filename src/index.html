@@ -84,6 +84,7 @@
     <div class="ops">
       <button class="btn btn-primary" data-act="card-exam">开始考试</button>
       <button class="btn" data-act="card-practice">练习模式</button>
+      <button class="btn" data-act="card-mock" title="随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟">模拟考试</button>
     </div>
     <div class="card-links">
       <button class="btn btn-sm btn-ghost p-modules" data-act="card-modules">按题型练习 →</button>
@@ -253,7 +254,7 @@
     <div class="panel">
       <h2 id="listTitle"></h2>
       <p class="desc" id="listDesc"></p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <div class="list-ops" id="listOps" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
         <button class="btn btn-primary" data-act="list-practice">开始重练</button>
         <button class="btn" data-act="list-clear">清空列表</button>
       </div>
@@ -321,11 +322,23 @@
         <button class="btn btn-primary" data-act="key-apply">保存并重新计分</button>
         <button class="btn" data-act="key-export">导出全部答案（JSON）</button>
         <button class="btn" data-act="key-import">导入答案（JSON）</button>
+        <button class="btn" data-act="db-export">备份全部进度</button>
+        <button class="btn" data-act="db-import">恢复备份</button>
         <button class="btn" data-act="key-reset-all" style="margin-left:auto;color:var(--bad)">重置全部进度</button>
       </div>
       <p class="desc" style="margin-top:16px;margin-bottom:0">
         <b>提示：</b>「恢复默认答案」只会清除你手动修改过的题目，回到页面自带答案。
       </p>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-panel-view">
+  <section class="view-enter">
+    <div class="panel">
+      <h2></h2>
+      <p class="desc"></p>
+      <div id="statsBody"></div>
     </div>
   </section>
 </template>
