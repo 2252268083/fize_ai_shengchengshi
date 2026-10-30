@@ -851,7 +851,19 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   function save() {
     if (memOnly) return;
     try { window.localStorage.setItem(LS, JSON.stringify(db)); }
-    catch (e) { memOnly = true; }
+    catch (e) {
+      /* 存储空间不足：逐条丢弃最旧的学习记录（大快照占空间）后重试，避免整个进度静默失效 */
+      for (var i = 0; i < 50 && db.history.length; i++) {
+        db.history.shift();
+        try {
+          window.localStorage.setItem(LS, JSON.stringify(db));
+          toast('存储空间不足，已自动清理 ' + (i + 1) + ' 条最旧的学习记录');
+          return;
+        } catch (e2) {}
+      }
+      memOnly = true;
+      toast('浏览器存储空间不足，本次进度可能无法保存，请导出学习记录备份');
+    }
   }
   function pstate(pid) {
     var s = db.papers[pid];
@@ -1815,7 +1827,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
 
     $('[data-act="retry"]', node).addEventListener('click', function () {
       if (s.persist && s.pid) redoModule(s.pid, s.mod || 'all', s.mode, s.random);
-      else beginSet(s.qs.map(function (q) { return q; }), s.title, s.mode, s.random);
+      else beginSet(s.qs.map(function (q) { return q; }), s.title, s.mode, s.random, s.persist);
     });
     $('[data-act="to-paper"]', node).addEventListener('click', function () {
       if (s.pid) { pick.pid = s.pid; pick.mode = s.mode; route = 'paper'; render(); }
@@ -1839,7 +1851,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
 
     function allQs() {
       return Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); })
-        .map(function (k) { return ALL.filter(function (x) { return x.key === k; })[0]; })
+        .map(function (k) { return QMAP[k]; })
         .filter(Boolean);
     }
     function visibleQs() {
