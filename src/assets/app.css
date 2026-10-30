@@ -152,6 +152,10 @@ a{color:var(--brand);text-decoration:none}
 .jump-bar .jump-input{display:flex;gap:6px;margin-left:auto}
 .jump-bar .jump-input input{width:92px;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
 .jump-bar .jump-input input:focus{border-color:var(--brand)}
+.custom-panel{padding:16px 18px}
+.custom-row{display:flex;gap:10px;flex-wrap:wrap}
+.custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
+.custom-row input:focus{border-color:var(--brand)}
 .qtop-spacer{flex:1}
 .qtop-actions{display:flex;gap:8px;align-items:center}
 .tag{
@@ -176,6 +180,7 @@ a{color:var(--brand);text-decoration:none}
 }
 .q-head{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12.5px;margin-bottom:12px}
 .q-head .num{color:var(--brand);font-weight:800;font-size:13px}
+.tag.gid{background:var(--brand-soft);color:var(--brand);font-weight:700;cursor:default}
 .q-head .fav{margin-left:auto;border:0;background:none;font-size:17px;line-height:1;color:#d7dce8;padding:2px}
 .q-head .fav.on{color:#f59e0b}
 .q-stem{

@@ -13,6 +13,8 @@
   var ALL = [];
   var BY_ID = {};
   var QMAP = {};
+  var NMAP = {};   /* 全局题号 -> 题目（题库全局编号，单选→多选→判断顺序） */
+  var MAXN = 0;
   var TYPES = ['single', 'multi', 'judge'];
   PAPERS.forEach(function (p) {
     BY_ID[p.id] = p;
@@ -21,6 +23,8 @@
       q.key = p.id + '#' + q.n;
       ALL.push(q);
       QMAP[q.key] = q;
+      if (!NMAP[q.n]) NMAP[q.n] = q;
+      if (q.n > MAXN) MAXN = q.n;
     });
   });
 
@@ -517,6 +521,19 @@
     var heroBtn = $('[data-act="random-exam"]', node);
     if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
 
+    // 自定义题库训练：题号/范围用「、」分隔，组卷后练习（交卷写入学习记录）
+    function startCustom() {
+      var nos = parseCustomNos($('#customNos', node).value, MAXN);
+      if (!nos.length) { toast('请输入有效题号，如：1-50、850、1081'); return; }
+      var qs = nos.map(function (n) { return NMAP[n]; }).filter(Boolean);
+      beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true);
+      toast('已组卷 ' + qs.length + ' 题，开始训练');
+    }
+    $('[data-act="custom-start"]', node).addEventListener('click', startCustom);
+    $('#customNos', node).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); startCustom(); }
+    });
+
     var kpis = $('#homeKpis', node);
     var answered = 0;
     PAPERS.forEach(function (p) { var s = db.papers[p.id]; if (s) answered += Object.keys(s.answers).length; });
@@ -537,6 +554,23 @@
     $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
     $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
     return node;
+  }
+
+  /* 解析自定义题号输入："1-50、120、850-860" → 去重排序后的全局题号数组 */
+  function parseCustomNos(raw, maxN) {
+    var out = {};
+    String(raw || '').split(/[、，,;；\s]+/).forEach(function (t) {
+      t = t.trim().replace(/^[#＃]/, '');
+      if (!t) return;
+      var m = t.match(/^(\d+)(?:[-~～—]\s*(\d+))?$/);
+      if (!m) return;
+      var a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+      if (b < a) { var x = a; a = b; b = x; }
+      if (a < 1) a = 1;
+      if (b > maxN) b = maxN;
+      for (var n = a; n <= b; n++) out[n] = true;
+    });
+    return Object.keys(out).map(Number).sort(function (x, y) { return x - y; });
   }
 
   function startRandomExam() {
@@ -638,6 +672,7 @@
         opts.appendChild(o);
       });
       $('#qNo', node).textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
+      $('#qGid', node).textContent = '#' + q.n;
       $('#qType', node).textContent = typeName(q.t);
       $('#qType', node).className = typeTagClass(q.t);
       $('#qHint', node).textContent = q.t === 'multi' ? '（多选，全对才得分）' : '';
@@ -844,11 +879,11 @@
         else beginSession(pid, mod, mode, { fresh: true, random: false });
       });
     });
-    // 跳转栏：按题号跳转（按题库题号找，随机顺序下也能定位）
+    // 跳转栏：按全局题号（#号，如 #850 或 850）跳转，随机顺序/分类模式下同样有效
     $('[data-act="jump-no"]', node).addEventListener('click', function () {
       var inp = $('#jumpNo', node);
-      var no = parseInt(inp.value, 10);
-      if (!no) { toast('请输入题号'); return; }
+      var no = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+      if (!no) { toast('请输入题号，如 #850'); return; }
       var i = sess.qs.findIndex(function (x) { return x.n === no; });
       if (i < 0) { toast('本次练习中没有第 ' + no + ' 题'); return; }
       sess.idx = i; persistPos(); rebuildQuestion();
@@ -969,7 +1004,7 @@
         var c = correctOf(q), a = s.answers[q.key] || '';
         var ok = c && a === c;
         item.classList.toggle('bad', !ok);
-        $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('第 ' + q.n + ' 题');
+        $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('#' + q.n);
         var tag = $('.tag', item);
         tag.textContent = typeName(q.t);
         tag.className = typeTagClass(q.t);
@@ -1071,11 +1106,11 @@
         var tag = $('.tag', row);
         tag.textContent = typeName(q.t);
         tag.className = typeTagClass(q.t);
-        $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+        $('.qtext', row).textContent = (PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n) + ' · ' + q.q;
         var c = correctOf(q);
         $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
         $('[data-act="row-go"]', row).addEventListener('click', function () {
-          beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+          beginSet([q], PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n + ' 单题重练', 'practice');
         });
         $('[data-act="row-del"]', row).addEventListener('click', function () {
           delete map[q.key]; save(); paint();

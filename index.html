@@ -163,6 +163,10 @@ a{color:var(--brand);text-decoration:none}
 .jump-bar .jump-input{display:flex;gap:6px;margin-left:auto}
 .jump-bar .jump-input input{width:92px;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
 .jump-bar .jump-input input:focus{border-color:var(--brand)}
+.custom-panel{padding:16px 18px}
+.custom-row{display:flex;gap:10px;flex-wrap:wrap}
+.custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
+.custom-row input:focus{border-color:var(--brand)}
 .qtop-spacer{flex:1}
 .qtop-actions{display:flex;gap:8px;align-items:center}
 .tag{
@@ -187,6 +191,7 @@ a{color:var(--brand);text-decoration:none}
 }
 .q-head{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12.5px;margin-bottom:12px}
 .q-head .num{color:var(--brand);font-weight:800;font-size:13px}
+.tag.gid{background:var(--brand-soft);color:var(--brand);font-weight:700;cursor:default}
 .q-head .fav{margin-left:auto;border:0;background:none;font-size:17px;line-height:1;color:#d7dce8;padding:2px}
 .q-head .fav.on{color:#f59e0b}
 .q-stem{
@@ -485,6 +490,18 @@ select{
     </div>
     <div class="section-title"><h2>开始训练</h2><span>整套训练/考试做完全部题，也可按题型专项练</span></div>
     <div class="paper-grid" id="paperGrid"></div>
+    <div class="section-title"><h2>自定义题库训练</h2><span>输入题号或范围，用「、」分隔，只练你想练的题</span></div>
+    <div class="panel custom-panel">
+      <div class="custom-row">
+        <input id="customNos" spellcheck="false" placeholder="例如：1-50、120、850-860、1081">
+        <button class="btn btn-primary" data-act="custom-start">开始训练</button>
+      </div>
+      <p class="desc" style="margin:10px 0 0">
+        支持单个题号和范围（如 <b>1-50</b>），用「、」「，」或空格分隔；题号即题库全局编号
+        （单选 1-849、多选 850-1080、判断 1081-1445），无效题号自动忽略。练习模式不限时，
+        交卷后写入学习记录。
+      </p>
+    </div>
     <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
     <div class="mini-grid" id="miniGrid"></div>
     <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
@@ -570,7 +587,7 @@ select{
         <button class="btn btn-sm jt" data-act="jump-type" data-type="judge">判断题</button>
       </div>
       <div class="jump-input">
-        <input id="jumpNo" type="number" min="1" max="1445" placeholder="题号" inputmode="numeric">
+        <input id="jumpNo" type="text" inputmode="numeric" placeholder="题号 #850" spellcheck="false">
         <button class="btn btn-sm" data-act="jump-no">跳转</button>
       </div>
     </div>
@@ -578,6 +595,7 @@ select{
       <div class="q-card">
         <div class="q-head">
           <span class="num" id="qNo"></span>
+          <span class="tag gid" id="qGid" title="题库全局题号（单选→多选→判断顺序，1-1445）"></span>
           <span class="tag" id="qType"></span>
           <span id="qHint"></span>
           <button class="fav" data-act="fav" title="收藏本题">☆</button>
@@ -787,6 +805,8 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   var ALL = [];
   var BY_ID = {};
   var QMAP = {};
+  var NMAP = {};   /* 全局题号 -> 题目（题库全局编号，单选→多选→判断顺序） */
+  var MAXN = 0;
   var TYPES = ['single', 'multi', 'judge'];
   PAPERS.forEach(function (p) {
     BY_ID[p.id] = p;
@@ -795,6 +815,8 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       q.key = p.id + '#' + q.n;
       ALL.push(q);
       QMAP[q.key] = q;
+      if (!NMAP[q.n]) NMAP[q.n] = q;
+      if (q.n > MAXN) MAXN = q.n;
     });
   });
 
@@ -1291,6 +1313,19 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     var heroBtn = $('[data-act="random-exam"]', node);
     if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
 
+    // 自定义题库训练：题号/范围用「、」分隔，组卷后练习（交卷写入学习记录）
+    function startCustom() {
+      var nos = parseCustomNos($('#customNos', node).value, MAXN);
+      if (!nos.length) { toast('请输入有效题号，如：1-50、850、1081'); return; }
+      var qs = nos.map(function (n) { return NMAP[n]; }).filter(Boolean);
+      beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true);
+      toast('已组卷 ' + qs.length + ' 题，开始训练');
+    }
+    $('[data-act="custom-start"]', node).addEventListener('click', startCustom);
+    $('#customNos', node).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); startCustom(); }
+    });
+
     var kpis = $('#homeKpis', node);
     var answered = 0;
     PAPERS.forEach(function (p) { var s = db.papers[p.id]; if (s) answered += Object.keys(s.answers).length; });
@@ -1311,6 +1346,23 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
     $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
     return node;
+  }
+
+  /* 解析自定义题号输入："1-50、120、850-860" → 去重排序后的全局题号数组 */
+  function parseCustomNos(raw, maxN) {
+    var out = {};
+    String(raw || '').split(/[、，,;；\s]+/).forEach(function (t) {
+      t = t.trim().replace(/^[#＃]/, '');
+      if (!t) return;
+      var m = t.match(/^(\d+)(?:[-~～—]\s*(\d+))?$/);
+      if (!m) return;
+      var a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+      if (b < a) { var x = a; a = b; b = x; }
+      if (a < 1) a = 1;
+      if (b > maxN) b = maxN;
+      for (var n = a; n <= b; n++) out[n] = true;
+    });
+    return Object.keys(out).map(Number).sort(function (x, y) { return x - y; });
   }
 
   function startRandomExam() {
@@ -1412,6 +1464,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         opts.appendChild(o);
       });
       $('#qNo', node).textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
+      $('#qGid', node).textContent = '#' + q.n;
       $('#qType', node).textContent = typeName(q.t);
       $('#qType', node).className = typeTagClass(q.t);
       $('#qHint', node).textContent = q.t === 'multi' ? '（多选，全对才得分）' : '';
@@ -1618,11 +1671,11 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         else beginSession(pid, mod, mode, { fresh: true, random: false });
       });
     });
-    // 跳转栏：按题号跳转（按题库题号找，随机顺序下也能定位）
+    // 跳转栏：按全局题号（#号，如 #850 或 850）跳转，随机顺序/分类模式下同样有效
     $('[data-act="jump-no"]', node).addEventListener('click', function () {
       var inp = $('#jumpNo', node);
-      var no = parseInt(inp.value, 10);
-      if (!no) { toast('请输入题号'); return; }
+      var no = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+      if (!no) { toast('请输入题号，如 #850'); return; }
       var i = sess.qs.findIndex(function (x) { return x.n === no; });
       if (i < 0) { toast('本次练习中没有第 ' + no + ' 题'); return; }
       sess.idx = i; persistPos(); rebuildQuestion();
@@ -1743,7 +1796,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         var c = correctOf(q), a = s.answers[q.key] || '';
         var ok = c && a === c;
         item.classList.toggle('bad', !ok);
-        $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('第 ' + q.n + ' 题');
+        $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('#' + q.n);
         var tag = $('.tag', item);
         tag.textContent = typeName(q.t);
         tag.className = typeTagClass(q.t);
@@ -1845,11 +1898,11 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         var tag = $('.tag', row);
         tag.textContent = typeName(q.t);
         tag.className = typeTagClass(q.t);
-        $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+        $('.qtext', row).textContent = (PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n) + ' · ' + q.q;
         var c = correctOf(q);
         $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
         $('[data-act="row-go"]', row).addEventListener('click', function () {
-          beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+          beginSet([q], PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n + ' 单题重练', 'practice');
         });
         $('[data-act="row-del"]', row).addEventListener('click', function () {
           delete map[q.key]; save(); paint();

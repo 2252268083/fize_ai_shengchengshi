@@ -53,6 +53,18 @@
     </div>
     <div class="section-title"><h2>开始训练</h2><span>整套训练/考试做完全部题，也可按题型专项练</span></div>
     <div class="paper-grid" id="paperGrid"></div>
+    <div class="section-title"><h2>自定义题库训练</h2><span>输入题号或范围，用「、」分隔，只练你想练的题</span></div>
+    <div class="panel custom-panel">
+      <div class="custom-row">
+        <input id="customNos" spellcheck="false" placeholder="例如：1-50、120、850-860、1081">
+        <button class="btn btn-primary" data-act="custom-start">开始训练</button>
+      </div>
+      <p class="desc" style="margin:10px 0 0">
+        支持单个题号和范围（如 <b>1-50</b>），用「、」「，」或空格分隔；题号即题库全局编号
+        （单选 1-849、多选 850-1080、判断 1081-1445），无效题号自动忽略。练习模式不限时，
+        交卷后写入学习记录。
+      </p>
+    </div>
     <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
     <div class="mini-grid" id="miniGrid"></div>
     <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
@@ -138,7 +150,7 @@
         <button class="btn btn-sm jt" data-act="jump-type" data-type="judge">判断题</button>
       </div>
       <div class="jump-input">
-        <input id="jumpNo" type="number" min="1" max="1445" placeholder="题号" inputmode="numeric">
+        <input id="jumpNo" type="text" inputmode="numeric" placeholder="题号 #850" spellcheck="false">
         <button class="btn btn-sm" data-act="jump-no">跳转</button>
       </div>
     </div>
@@ -146,6 +158,7 @@
       <div class="q-card">
         <div class="q-head">
           <span class="num" id="qNo"></span>
+          <span class="tag gid" id="qGid" title="题库全局题号（单选→多选→判断顺序，1-1445）"></span>
           <span class="tag" id="qType"></span>
           <span id="qHint"></span>
           <button class="fav" data-act="fav" title="收藏本题">☆</button>
