@@ -655,12 +655,26 @@
       }, '取消');
   }
   function discardClearUndo() {
-    showModal('丢弃回滚点？', '丢弃后「' + (db.clearUndo ? db.clearUndo.title : '') + '」清空前的作答将无法再恢复（下载的备份文件仍可用）。',
+    showModal('丢弃回滚点？', '丢弃后「' + (db.clearUndo ? db.clearUndo.title : '') + '」清空前的作答将无法再恢复。想留一份到电脑的话，先点「备份到本地」再丢弃。',
       '丢弃', function () {
         delete db.clearUndo;
         save(); render();
         toast('已丢弃回滚点');
       }, '取消');
+  }
+  /* 回滚条上的「备份到本地」：把清空前的那份状态导成 JSON 文件（唯一手动下载点） */
+  function exportClearUndo() {
+    var u = db.clearUndo;
+    if (!u || !u.pid) return;
+    var snap = JSON.parse(JSON.stringify(db));
+    snap.papers = snap.papers || {};
+    snap.papers[u.pid] = u.state;   /* 用清空前的快照覆盖，导出的就是清空前的进度 */
+    delete snap.clearUndo;
+    var d = new Date();
+    var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
+    downloadBlob(JSON.stringify({ backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: snap }, null, 2),
+      'application/json', '清空前进度备份_' + stamp + '.json');
+    toast('已把清空前的进度备份到本地（含全部错题、收藏、笔记）');
   }
   function buildClearUndo() {
     var u = db.clearUndo;
@@ -673,6 +687,10 @@
     var rb = el('button', 'btn btn-primary cu-btn', '恢复作答');
     rb.addEventListener('click', restoreClearUndo);
     bar.appendChild(rb);
+    var eb = el('button', 'btn cu-btn', '备份到本地');
+    eb.title = '把清空前的进度导出成 JSON 文件，可换设备恢复';
+    eb.addEventListener('click', exportClearUndo);
+    bar.appendChild(eb);
     var dbtn = el('button', 'btn cu-btn', '丢弃');
     dbtn.addEventListener('click', discardClearUndo);
     bar.appendChild(dbtn);
@@ -686,21 +704,18 @@
       beginSession(p.id, 'all', mode, { fresh: true, random: false });
       return;
     }
-    showModal('本卷已有作答记录', '可以「继续做」保留本卷已答接着做，或「清空并开始」清空本卷全部已答答案与标记后重新做（错题本、收藏、历史成绩保留）。',
+    showModal('本卷已有作答记录', '可以「继续做」保留本卷已答接着做，或「清空并开始」清空本卷全部已答答案与标记后重新做（错题本、收藏、笔记、历史成绩保留）。',
       '清空并开始', function () {
-        /* v3.9.2 二次确认：清空前自动备份，反悔可恢复 */
+        /* 二次确认：清空前在本浏览器保存回滚点，反悔可恢复（不下载文件） */
         showModal('确认清空并重新开始？',
-          '清空前会自动做两份备份：① 下载本机全部进度的备份文件（JSON）；② 在本页保存一个「回滚点」。' +
-          '然后才清空本卷全部已答答案与标记（错题本、收藏、历史成绩保留）。清空后反悔了，回到首页点「恢复作答」即可一键还原。',
-          '备份并清空', function () {
+          '清空前会把本卷当前的作答与进度保存在本浏览器里（一个可一键恢复的「回滚点」），' +
+          '不会下载任何文件到电脑。然后才清空本卷全部已答答案与标记（错题本、收藏、笔记、历史成绩保留）。' +
+          '清空后反悔了，回到首页点「恢复作答」即可原样还原。',
+          '确认清空', function () {
             makeClearUndo(p);   /* 先拍快照（此时答案还未清） */
-            var d = new Date();
-            var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
-            downloadBlob(JSON.stringify({ backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: db }, null, 2),
-              'application/json', '练习进度备份_清空前_' + stamp + '.json');
             clearPaperAnswers(p.id);
             beginSession(p.id, 'all', mode, { fresh: true, random: false });
-            toast('已生成回滚点并清空，反悔可回首页恢复');
+            toast('已保存回滚点并清空，反悔可回首页恢复');
           }, '取消');
       }, '取消', null,
       { text: '继续做', onClick: function () {
@@ -1842,6 +1857,18 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
   }
 
+  /* 唯一会往本地写文件的入口：用户主动点「备份到本地」才下载。
+     清空作答、答错、翻题等一切自动流程都不下载，数据只留在浏览器 localStorage。 */
+  function exportAllBackup() {
+    var d = new Date();
+    var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
+    /* backupVer:2 外壳：携带导出设备名，对方恢复时错题/笔记按来源合并标记 */
+    var pack = { backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: db };
+    downloadBlob(JSON.stringify(pack, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
+    var mid = db.temp && db.temp.order && Object.keys(db.temp.answers || {}).length ? '、未交卷的临时练习' : '';
+    toast('已导出全部进度（作答位置' + mid + '、错题、收藏、笔记 ' + noteCount() + ' 条、历史记录）——发到另一台设备「恢复备份」即可接着答，错题与笔记会合并进对方');
+  }
+
   /* ---------------- lists ---------------- */
   function viewList(kind) {
     var node = cloneTpl('tpl-list');
@@ -2516,15 +2543,7 @@
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
     });
-    $('[data-act="db-export"]', node).addEventListener('click', function () {
-      var d = new Date();
-      var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
-      /* backupVer:2 外壳：携带导出设备名，对方恢复时错题按来源合并标记 */
-      var pack = { backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: db };
-      downloadBlob(JSON.stringify(pack, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
-      var mid = db.temp && db.temp.order && Object.keys(db.temp.answers || {}).length ? '、未交卷的临时练习' : '';
-      toast('已导出全部进度（作答位置' + mid + '、错题、收藏、笔记 ' + noteCount() + ' 条、历史记录）——发到另一台设备「恢复备份」即可接着答，错题与笔记会合并进对方');
-    });
+    $('[data-act="db-export"]', node).addEventListener('click', exportAllBackup);
     $('[data-act="db-import"]', node).addEventListener('click', function () {
       var inp = document.createElement('input');
       inp.type = 'file';
