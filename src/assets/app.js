@@ -1063,7 +1063,11 @@
       if (q.t === 'multi') {
         var next = pendingOf(q);
         next = next.indexOf(L) >= 0 ? next.replace(L, '') : sortedLetters(next + L);
-        if (sess.mode === 'practice' && sess.answers[q.key]) { toast('本题已作答，可「清空本题」后重选'); return; }
+        if (sess.mode === 'practice' && sess.answers[q.key]) {
+          var c9 = correctOf(q);
+          /* 答错的多选题允许重选，再点「确认」改正；已答对的不允许改 */
+          if (!(c9 && sess.answers[q.key] !== c9)) { toast('本题已作答，可「清空本题」后重选'); return; }
+        }
         sess.pending[q.key] = next;
         if (sess.mode === 'exam') {
           setAnswer(q, next);
@@ -1072,7 +1076,14 @@
         paintCard();
         return;
       }
-      if (sess.mode === 'practice' && sess.answers[q.key]) { toast('本题已作答，可「清空本题」后重选'); return; }
+      if (sess.mode === 'practice' && sess.answers[q.key]) {
+        var c8 = correctOf(q);
+        if (c8 && sess.answers[q.key] !== c8) {
+          if (L === c8) { correctWrong(q, c8); return; }  /* 答错后点正确答案 → 改正并收场 */
+          toast('正确答案是 ' + c8 + '（已标绿），点绿色选项即可改正'); return;
+        }
+        toast('本题已作答，可「清空本题」后重选'); return;
+      }
       setAnswer(q, L);
       if (sess.mode === 'practice') {
         var c = correctOf(q);
@@ -1093,6 +1104,24 @@
       if (sess.persist) save();
     }
 
+    /* 答错后点绿色正确答案：改正本题、移出错题本，短暂展示「已改正」后自动进入下一题；
+       最后一题则交给 maybeAutoSubmit 弹交卷确认。 */
+    function correctWrong(q, c) {
+      setAnswer(q, c);
+      removeWrong(q);
+      paintOptions();
+      paintCard();
+      paintFeedback();
+      var idx0 = sess.idx, wasLast = idx0 === sess.qs.length - 1;
+      toast(wasLast ? '已改正 ✓' : '已改正 ✓，即将进入下一题');
+      setTimeout(function () {
+        /* 期间用户翻题/清空/交卷则不再自动前进 */
+        if (!sess || sess.done || sess.idx !== idx0 || sess.answers[q.key] !== c) return;
+        if (wasLast) maybeAutoSubmit();
+        else { sess.idx++; persistPos(); rebuildQuestion(); }
+      }, 700);
+    }
+
     function paintOptions() {
       var q = cur();
       var a = sess.answers[q.key] || '';
@@ -1101,7 +1130,8 @@
       var pending = (sess.mode === 'practice' && q.t === 'multi') ? pendingOf(q) : a;
       $all('.opt', opts).forEach(function (o) {
         var L = o.getAttribute('data-letter');
-        var sel = (sess.mode === 'practice' && q.t === 'multi' && !a ? pending : a).indexOf(L) >= 0;
+        var showPend = sess.mode === 'practice' && q.t === 'multi' && (!a || (c && a !== c));
+        var sel = (showPend ? pending : a).indexOf(L) >= 0;
         o.classList.toggle('sel', sel);
         o.classList.toggle('correct', showKey && c.indexOf(L) >= 0);
         o.classList.toggle('wrong', showKey && sel && c.indexOf(L) < 0);
@@ -1111,7 +1141,9 @@
         else mk.textContent = '';
       });
       var b = $('[data-act="confirm-multi"]', node);
-      var needConfirm = sess.mode === 'practice' && q.t === 'multi' && !sess.answers[q.key];
+      /* 未作答，或已答错（可重选后确认改正）时显示确认按钮 */
+      var needConfirm = sess.mode === 'practice' && q.t === 'multi' &&
+        (!sess.answers[q.key] || (c && sess.answers[q.key] !== c));
       b.classList.toggle('hidden', !needConfirm);
     }
 
