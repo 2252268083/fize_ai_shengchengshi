@@ -370,6 +370,30 @@ select{
   border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13.5px;line-height:1.7;outline:none;
 }
 
+/* 选项备注：选项行尾的 ✎ 只在桌面端出现；手机端不提供添加，只展示已有备注 */
+.opt-note-add{
+  flex:none;align-self:center;margin-left:4px;border:0;background:none;color:#c7d2fe;
+  font-size:15px;line-height:1;padding:3px 5px;border-radius:7px;transition:.14s;
+}
+.opt-note-add:hover{color:var(--brand);background:var(--brand-soft)}
+.opt-note-add.on{color:var(--brand);background:var(--brand-soft)}
+.opt-note-wrap{display:none;margin:-4px 0 2px 40px}
+.opt-note-wrap.show{display:block}
+.opt-note{
+  background:#eff4ff;border:1px solid #dbe6ff;border-radius:8px;padding:5px 9px;
+  color:#1e40af;font-size:12.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;
+}
+.opt-note-input{
+  width:100%;min-height:54px;resize:vertical;border:1.5px solid var(--brand);border-radius:9px;
+  padding:7px 9px;font-family:inherit;font-size:13px;line-height:1.6;outline:none;background:#fff;
+}
+.opt-note-ops{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+@media (max-width:768px){
+  .opt-note-add{display:none}          /* 手机端不显示添加入口 */
+  .opt-note-wrap{margin-left:0}        /* 只读展示，占满宽度 */
+}
+
+
 /* start dialog */
 .start-modal{max-width:480px}
 .start-sub{margin-bottom:2px}

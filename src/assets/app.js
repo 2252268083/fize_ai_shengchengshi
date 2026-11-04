@@ -464,24 +464,72 @@
 
   /* ---------------- notes ----------------
      逐题笔记：key 与错题本/收藏同一套（T#n），所以不论是整套、题型模块、
-     错题重练、收藏重练、全库随机还是模拟考试，做到同一道题都能看到同一份笔记。 */
+     错题重练、收藏重练、全库随机还是模拟考试，做到同一道题都能看到同一份笔记。
+     结构：{'T#n': {pid, n, t:'整题笔记', o:{'A':'该选项的一句备注'}, at, up}} */
   function noteOf(q) {
     var n = db.notes[q.key];
     return (n && n.t) ? n : null;
   }
+  /* 选项备注：{'A':'…'}，按选项字母存 */
+  function optNotesOf(q) {
+    var n = db.notes[q.key];
+    return (n && n.o) ? n.o : {};
+  }
+  function optNoteOf(q, L) {
+    var o = optNotesOf(q);
+    return o[L] || '';
+  }
+  /* 有整题笔记或任意选项备注，都算「这道题写过笔记」 */
+  function noteHasContent(n) {
+    if (!n) return false;
+    if (n.t) return true;
+    return !!(n.o && Object.keys(n.o).length);
+  }
   function noteCount() {
-    return Object.keys(db.notes).filter(function (k) { return db.notes[k] && db.notes[k].t; }).length;
+    return Object.keys(db.notes).filter(function (k) { return noteHasContent(db.notes[k]); }).length;
   }
   /* 空文本等于删除笔记；返回 true 表示有内容落库 */
   function setNote(q, text) {
     var t = String(text == null ? '' : text).replace(/\s+$/, '');
+    var old = db.notes[q.key];
     if (!t.trim()) {
-      if (db.notes[q.key]) { delete db.notes[q.key]; save(); }
+      if (!old) return false;
+      /* 只清整题笔记，选项备注保留；两者都空才删除整条 */
+      delete old.t;
+      old.up = Date.now();
+      if (!noteHasContent(old)) { delete db.notes[q.key]; save(); return false; }
+      db.notes[q.key] = old; save();
       return false;
     }
-    var old = db.notes[q.key];
     if (old && old.t === t) return true;   /* 内容没变：不重复写盘（翻题时每次都会 flush） */
-    db.notes[q.key] = { pid: q.pid, n: q.n, t: t, at: (old && old.at) || Date.now(), up: Date.now() };
+    var rec = old || { pid: q.pid, n: q.n, at: Date.now() };
+    rec.pid = q.pid; rec.n = q.n; rec.t = t; rec.up = Date.now();
+    if (!rec.at) rec.at = rec.up;
+    db.notes[q.key] = rec;
+    save();
+    return true;
+  }
+  /* 选项备注：空文本＝删掉该选项的备注 */
+  function setOptNote(q, L, text) {
+    var t = String(text == null ? '' : text).replace(/\s+$/, '');
+    var rec = db.notes[q.key];
+    if (!t.trim()) {
+      if (!rec || !rec.o || !rec.o[L]) return false;
+      delete rec.o[L];
+      if (!Object.keys(rec.o).length) delete rec.o;
+      rec.up = Date.now();
+      if (!noteHasContent(rec)) { delete db.notes[q.key]; save(); return false; }
+      db.notes[q.key] = rec; save();
+      return false;
+    }
+    rec = rec || { pid: q.pid, n: q.n, at: Date.now() };
+    rec.pid = q.pid; rec.n = q.n;
+    rec.o = rec.o || {};
+    if (rec.o[L] === t) return true;
+    rec.o[L] = t;
+    rec.up = Date.now();
+    if (!rec.at) rec.at = rec.up;
+    db.notes[q.key] = rec;
     save();
     return true;
   }
@@ -1091,7 +1139,8 @@
     });
 
     function rebuildQuestion() {
-      noteFlush();   /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
+      noteFlush();       /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
+      optNoteFlush();    /* 选项备注同理 */
       var q = cur();
       // 分类切换栏：当前模块高亮
       $all('.jt', node).forEach(function (b) {
@@ -1099,12 +1148,27 @@
       });
       opts.innerHTML = '';
       q.o.forEach(function (txt, i) {
+        var L = letterAt(i);
         var o = cloneTpl('tpl-option');
-        o.setAttribute('data-letter', letterAt(i));
-        $('.letter', o).textContent = letterAt(i);
+        o.setAttribute('data-letter', L);
+        $('.letter', o).textContent = L;
         $('.txt', o).textContent = txt;
         o.addEventListener('click', function () { choose(i); });
+        /* 选项后的「✎」：给这个选项单独记一句（手机端由 CSS 隐藏，只展示已有内容） */
+        var pen = el('button', 'opt-note-add', '✎');
+        pen.type = 'button';
+        pen.setAttribute('data-letter', L);
+        pen.title = '给这个选项记一句';
+        pen.addEventListener('click', function (e) {
+          e.stopPropagation();   /* 不要触发选中该选项 */
+          toggleOptNote(L);
+        });
+        o.appendChild(pen);
         opts.appendChild(o);
+        /* 选项备注展示/编辑区（紧贴该选项下方） */
+        var wrap = el('div', 'opt-note-wrap');
+        wrap.setAttribute('data-letter', L);
+        opts.appendChild(wrap);
       });
       $('#qNo', node).textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
       $('#qGid', node).textContent = '#' + q.n;
@@ -1119,6 +1183,8 @@
       paintCard();
       paintFeedback();
       paintNote(false);   /* 换题：有笔记自动展开正文，没有则收起 */
+      optEditing = null;
+      paintOptNotes();    /* 换题：选项备注只展示已有内容 */
       tick();
     }
 
@@ -1142,11 +1208,101 @@
       noteKey = q.key;
       view.textContent = n ? n.t : '';
       view.classList.toggle('hidden', !n);
-      box.classList.toggle('has-note', !!n);
-      badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at)) : '';
+      var oc = Object.keys(optNotesOf(q)).length;   /* 选项备注条数 */
+      box.classList.toggle('has-note', !!n || oc > 0);
+      badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at) + (oc ? ' · 选项备注 ' + oc + ' 条' : ''))
+        : (oc ? ('选项备注 ' + oc + ' 条') : '');
       btn.textContent = n ? '编辑' : '写笔记';
       if (!sameEdit) ta.value = n ? n.t : '';
       box.classList.toggle('editing', sameEdit ? true : !!open);
+    }
+
+    /* ---------- 选项备注：每个选项后面的 ✎，记这个选项为什么对/错 ---------- */
+    var optTimer = null, optPending = null, optEditing = null;
+
+    function scheduleOptSave(key, L, text) {
+      optPending = { key: key, L: L, text: text };
+      if (optTimer) clearTimeout(optTimer);
+      optTimer = setTimeout(function () { optTimer = null; optNoteFlush(); }, 500);
+    }
+    function optNoteFlush() {
+      if (optTimer) { clearTimeout(optTimer); optTimer = null; }
+      if (!optPending) return;
+      var p = optPending; optPending = null;
+      var q2 = QMAP[p.key];
+      if (!q2) return;
+      setOptNote(q2, p.L, p.text);
+      if (q2 === cur()) paintNoteMeta();   /* 角标跟着更新（选项备注 N 条） */
+    }
+    /* 题卡角标：整题笔记时间 + 选项备注条数 */
+    function paintNoteMeta() {
+      var q = cur(), n = noteOf(q), oc = Object.keys(optNotesOf(q)).length;
+      var badge = $('#noteBadge', node), box = $('#qNote', node);
+      if (badge) badge.textContent = n
+        ? ('已记 · ' + noteTime(n.up || n.at) + (oc ? ' · 选项备注 ' + oc + ' 条' : ''))
+        : (oc ? ('选项备注 ' + oc + ' 条') : '');
+      if (box) box.classList.toggle('has-note', !!n || oc > 0);
+    }
+    function paintOptNotes() {
+      var q = cur(), dict = optNotesOf(q);
+      $all('.opt-note-add', opts).forEach(function (b) {
+        b.classList.toggle('on', optEditing === b.getAttribute('data-letter'));
+      });
+      $all('.opt-note-wrap', opts).forEach(function (w) {
+        var L = w.getAttribute('data-letter');
+        var txt = dict[L] || '';
+        var editing = optEditing === L;
+        w.innerHTML = '';
+        w.classList.toggle('show', !!txt || editing);
+        w.classList.toggle('editing', editing);
+        if (editing) {
+          var ta = document.createElement('textarea');
+          ta.className = 'opt-note-input';
+          ta.spellcheck = false;
+          ta.value = txt;
+          ta.placeholder = '这个选项哪里不对 / 怎么记（停止输入自动保存）';
+          ta.addEventListener('input', function () { scheduleOptSave(q.key, L, ta.value); });
+          ta.addEventListener('keydown', function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              optNoteFlush();
+              optEditing = null;
+              paintOptNotes();
+            }
+          });
+          w.appendChild(ta);
+          var bar = el('div', 'opt-note-ops');
+          var del = el('button', 'btn btn-sm btn-ghost', '删除');
+          del.type = 'button';
+          del.addEventListener('click', function () {
+            setOptNote(q, L, '');
+            optEditing = null;
+            paintOptNotes();
+            toast('已删除该选项备注');
+          });
+          var done = el('button', 'btn btn-sm', '收起');
+          done.type = 'button';
+          done.addEventListener('click', function () {
+            optNoteFlush();
+            optEditing = null;
+            paintOptNotes();
+          });
+          bar.appendChild(del); bar.appendChild(done);
+          w.appendChild(bar);
+          setTimeout(function () { try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {} }, 0);
+        } else if (txt) {
+          var v = el('div', 'opt-note');
+          v.textContent = txt;   /* textContent：笔记内容按纯文本渲染 */
+          w.appendChild(v);
+        }
+      });
+      paintNoteMeta();
+    }
+    function toggleOptNote(L) {
+      optNoteFlush();
+      if (optEditing === L) { optEditing = null; paintOptNotes(); return; }
+      optEditing = L;
+      paintOptNotes();
     }
 
     /* 离开当前题目前把编辑框内容落库（空文本＝删笔记）；无变化不写盘 */
@@ -1159,11 +1315,13 @@
       var had = !!noteOf(q);
       var keep = setNote(q, ta.value);
       var badge = $('#noteBadge', node), btn = $('#btnNoteToggle', node);
-      var n = noteOf(q);
-      if (badge) badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at)) : '';
+      var n = noteOf(q), oc = Object.keys(optNotesOf(q)).length;
+      if (badge) badge.textContent = n
+        ? ('已记 · ' + noteTime(n.up || n.at) + (oc ? ' · 选项备注 ' + oc + ' 条' : ''))
+        : (oc ? ('选项备注 ' + oc + ' 条') : '');
       if (btn) btn.textContent = n ? '编辑' : '写笔记';
       var box = $('#qNote', node);
-      if (box) box.classList.toggle('has-note', !!n);
+      if (box) box.classList.toggle('has-note', !!n || oc > 0);
       var view = $('#noteView', node);
       if (view) { view.textContent = n ? n.t : ''; view.classList.toggle('hidden', !n); }
       return had !== keep;
@@ -1172,7 +1330,7 @@
     /* 答错时自动展开笔记框（只在本题还没写过笔记、且不是考试模式时），不抢焦点 */
     function noteOnWrong(q) {
       if (sess.mode !== 'practice') return;
-      if (noteOf(q)) return;
+      if (noteHasContent(db.notes[q.key])) return;
       paintNote(true);
       var ta = $('#noteText', node);
       if (ta) {
@@ -1218,6 +1376,7 @@
     }
 
     function choose(i) {
+      optNoteFlush();   /* 点选项前先把正在编辑的选项备注落库 */
       var q = cur();
       var L = letterAt(i);
       if (q.t === 'multi') {
@@ -1384,7 +1543,8 @@
     });
 
     /* ---- 笔记交互 ---- */
-    sess.flushNote = noteFlush;   /* 退出/切页/关页面时由 persistPos 兜底落库 */
+    /* 退出/切页/关页面时由 persistPos 兜底落库（整题笔记 + 选项备注一起） */
+    sess.flushNote = function () { optNoteFlush(); noteFlush(); };
     var noteBox = $('#qNote', node);
     if (noteBox) {
       var ta = $('#noteText', node);
@@ -1798,10 +1958,11 @@
         }
         /* 写过笔记的题：列表里直接把笔记摘要带出来（点「查看」进单题即可改） */
         var nt = db.notes[q.key];
-        if (nt && nt.t) {
+        if (noteHasContent(nt)) {
+          var nsum = nt.t || ('选项备注 ' + Object.keys(nt.o || {}).length + ' 条');
           var nb = el('span', 'note-badge-row',
-            '📝 ' + (nt.t.length > 70 ? nt.t.slice(0, 70) + '…' : nt.t));
-          nb.title = nt.t;
+            '📝 ' + (nsum.length > 70 ? nsum.slice(0, 70) + '…' : nsum));
+          nb.title = nt.t || '';
           sub.appendChild(nb);
         }
         $('[data-act="row-go"]', row).addEventListener('click', function () {
@@ -1944,7 +2105,7 @@
     }
     function allQs() {
       return Object.keys(db.notes)
-        .filter(function (k) { return db.notes[k] && db.notes[k].t; })
+        .filter(function (k) { return noteHasContent(db.notes[k]); })
         .sort(function (a, b) {
           return (db.notes[b].up || db.notes[b].at || 0) - (db.notes[a].up || db.notes[a].at || 0);
         })
@@ -1982,8 +2143,14 @@
 
         var grow = el('div', 'grow');
         grow.appendChild(el('div', 'qtext', '#' + q.n + ' · ' + q.q));
-        var txt = el('div', 'qsub note-text', n.t);
+        var txt = el('div', 'qsub note-text', n.t || '');
+        if (!n.t) txt.classList.add('hidden');
         grow.appendChild(txt);
+        /* 选项备注：逐条列出（A：… / B：…），可在答题页的选项后继续改 */
+        var on = n.o || {};
+        Object.keys(on).sort().forEach(function (L) {
+          grow.appendChild(el('div', 'opt-note', L + '：' + on[L]));
+        });
         grow.appendChild(el('div', 'note-when', '更新于 ' + fmt(n.up || n.at)));
         row.appendChild(grow);
 
@@ -1999,7 +2166,7 @@
             ta = document.createElement('textarea');
             ta.className = 'note-inline';
             ta.spellcheck = false;
-            ta.value = n.t;
+            ta.value = n.t || '';
             txt.classList.add('hidden');
             grow.insertBefore(ta, txt);
             ta.focus();
@@ -2009,8 +2176,8 @@
             bEdit.classList.add('btn-primary');
             return;
           }
-          if (!setNote(q, ta.value)) { delete db.notes[q.key]; save(); }
-          toast(noteOf(q) ? '笔记已保存' : '笔记已清空');
+          setNote(q, ta.value);   /* 空文本清整题笔记，选项备注由 setNote 内部保留 */
+          toast(noteHasContent(db.notes[q.key]) ? '笔记已保存' : '笔记已清空');
           paint();
         });
         var bDel = el('button', 'btn btn-sm btn-ghost', '删除');
@@ -2049,10 +2216,16 @@
       var rows = qs.map(function (q) {
         var n = db.notes[q.key] || {};
         var c = correctOf(q);
+        var on = n.o || {};
+        var optHtml = Object.keys(on).sort().map(function (L) {
+          return '<p style="margin:2px 0 2px 14px;color:#1e40af">· ' + L + '：' + escHtml(on[L]) + '</p>';
+        }).join('');
         return '<div style="border-bottom:1px dashed #ccc;padding:10px 0;page-break-inside:avoid">' +
           '<p style="margin:0 0 4px;font-weight:bold">#' + q.n + ' [' + typeName(q.t) + '] ' + escHtml(q.q) + '</p>' +
           '<p style="margin:2px 0;color:#0f7a3d">参考答案：' + escHtml(c || '未收录') + '</p>' +
-          '<p style="margin:2px 0;color:#1e40af">📝 笔记：' + escHtml(n.t || '') + '</p></div>';
+          (n.t ? '<p style="margin:2px 0;color:#1e40af">📝 笔记：' + escHtml(n.t) + '</p>' : '') +
+          (optHtml ? '<p style="margin:2px 0;color:#1e40af">📝 选项备注：</p>' + optHtml : '') +
+          '</div>';
       }).join('');
       var w = window.open('', '_blank');
       if (!w) { toast('浏览器拦截了弹窗，请允许弹窗后重试'); return; }
