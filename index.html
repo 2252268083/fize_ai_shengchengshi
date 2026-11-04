@@ -334,6 +334,13 @@ select{
   .q-foot .spacer{display:none}
   .q-foot .btn{min-height:38px}
 }
+/* 备份合并错题的来源标记 */
+.src-badge{
+  display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;
+  background:var(--warn-soft);border:1px solid #fde3bd;color:#8a5a10;
+  font-size:11px;font-weight:600;vertical-align:1px;white-space:nowrap;
+}
+
 /* start dialog */
 .start-modal{max-width:480px}
 .start-sub{margin-bottom:2px}
@@ -785,6 +792,7 @@ select{
         <button class="btn" data-act="key-import">导入答案（JSON）</button>
         <button class="btn" data-act="db-export">备份全部进度</button>
         <button class="btn" data-act="db-import">恢复备份</button>
+        <span class="hint" id="dbDevice"></span>
         <button class="btn" data-act="key-reset-all" style="margin-left:auto;color:var(--bad)">重置全部进度</button>
       </div>
       <p class="desc" style="margin-top:16px;margin-bottom:0">
@@ -1109,6 +1117,16 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     applyLayoutAttr();
     render();
     toast('已切换到「' + LAYOUT_NAME[next] + '」布局');
+  }
+
+  /* 本设备名称：备份文件携带，恢复时用于标记错题来源 */
+  function deviceName() {
+    var st = db.settings || (db.settings = {});
+    if (!st.deviceName) {
+      st.deviceName = '设备-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      save();
+    }
+    return st.deviceName;
   }
 
   function cur() { return sess.qs[sess.idx]; }
@@ -2043,7 +2061,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         render();
       }
       if (answered && !sess.done) {
-        showModal('暂时离开？', '作答进度会保存，下次点「继续」接着做。要换设备继续答，可到「答案管理」点「备份全部进度」，在另一台设备上「恢复备份」即可接着做（未交卷进度也包含在内）。', '离开', leave, '继续答题');
+        showModal('暂时离开？', '作答进度会保存，下次点「继续」接着做。要换设备继续答，可到「答案管理」点「备份全部进度」，在另一台设备上「恢复备份」即可接着做（未交卷进度也包含在内，错题会合并进对方错题本）。', '离开', leave, '继续答题');
       } else leave();
     });
 
@@ -2291,9 +2309,14 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         reviewRows();
         return;
       }
-      desc.textContent = kind === 'wrong'
-        ? '共 ' + allQs().length + ' 道。答对后会自动移出；也可手动移除。每次交卷的错题可在上方「练习回顾」按次查看。'
-        : '共 ' + allQs().length + ' 道。收藏的题目可以随时回看。';
+      if (kind === 'wrong') {
+        var nSrc = Object.keys(db.wrong).filter(function (k) { return db.wrong[k] && db.wrong[k].src; }).length;
+        desc.textContent = '共 ' + allQs().length + ' 道' +
+          (nSrc ? '，其中 ' + nSrc + ' 道来自其他设备的备份' : '') +
+          '。答对后会自动移出；也可手动移除。每次交卷的错题可在上方「练习回顾」按次查看。';
+      } else {
+        desc.textContent = '共 ' + allQs().length + ' 道。收藏的题目可以随时回看。';
+      }
       var qs = visibleQs();
       if (!qs.length) {
         body.appendChild(el('div', 'empty', kind === 'wrong'
@@ -2307,7 +2330,12 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         tag.className = typeTagClass(q.t);
         $('.qtext', row).textContent = (PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n) + ' · ' + q.q;
         var c = correctOf(q);
-        $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+        var sub = $('.qsub', row);
+        sub.textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+        /* 来自备份的错题显示来源标记 */
+        if (kind === 'wrong' && map[q.key] && map[q.key].src) {
+          sub.appendChild(el('span', 'src-badge', '来自「' + map[q.key].src + '」的备份'));
+        }
         $('[data-act="row-go"]', row).addEventListener('click', function () {
           beginSet([q], PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n + ' 单题重练', 'practice');
         });
@@ -2572,9 +2600,11 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   }
 
   function viewKey() {
+    var dn = deviceName();
     var node = cloneTpl('tpl-key');
     var sel = $('#keyPaper', node);
     var ta = $('#keyText', node);
+    $('#dbDevice', node).textContent = '本设备名称：' + dn + '（恢复别人的备份时，其中的错题会合并进本机错题本并标注来源）';
 
     // 动态生成卷别选项（单题库模式下只有一个「理论题库」）
     sel.innerHTML = '';
@@ -2654,9 +2684,11 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     $('[data-act="db-export"]', node).addEventListener('click', function () {
       var d = new Date();
       var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
-      downloadBlob(JSON.stringify(db, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
+      /* backupVer:2 外壳：携带导出设备名，对方恢复时错题按来源合并标记 */
+      var pack = { backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: db };
+      downloadBlob(JSON.stringify(pack, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
       var mid = db.temp && db.temp.order && Object.keys(db.temp.answers || {}).length ? '、未交卷的临时练习' : '';
-      toast('已导出全部进度（作答位置' + mid + '、错题、收藏、历史记录）——发到另一台设备「恢复备份」即可接着答');
+      toast('已导出全部进度（作答位置' + mid + '、错题、收藏、历史记录）——发到另一台设备「恢复备份」即可接着答，错题会合并进对方错题本');
     });
     $('[data-act="db-import"]', node).addEventListener('click', function () {
       var inp = document.createElement('input');
@@ -2669,16 +2701,34 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         rd.onload = function () {
           var data;
           try { data = JSON.parse(String(rd.result)); } catch (e) { toast('文件解析失败，请检查 JSON 格式'); return; }
-          if (!data || typeof data !== 'object' || !data.papers || !data.history) {
-            toast('这不是有效的进度备份文件'); return;
-          }
-          showModal('恢复备份？', '将用备份文件覆盖当前全部进度（作答、错题、收藏、历史记录、答案修改），当前数据会被替换且不可恢复。',
-            '覆盖恢复', function () {
+          if (!data || typeof data !== 'object') { toast('这不是有效的进度备份文件'); return; }
+          /* v3.7 外壳格式（backupVer:2）；兼容旧版裸 db 备份 */
+          var pack = (data.backupVer === 2 && data.db && typeof data.db === 'object')
+            ? data : { deviceName: '', exportedAt: 0, db: data };
+          var d = pack.db || {};
+          if (!d.papers || !d.history) { toast('这不是有效的进度备份文件'); return; }
+          var srcName = pack.deviceName || '备份文件';
+          showModal('恢复备份？',
+            '来自「' + srcName + '」的备份。作答进度、收藏、历史记录、答案修改将覆盖为备份内容；' +
+            '错题本为<b>合并</b>：备份里的错题逐道加入（标记为来自「' + srcName + '」的备份错题），当前已有错题全部保留、不覆盖。',
+            '合并恢复', function () {
+              var curName = deviceName();
+              var added = 0;
+              var bw = d.wrong || {};
+              Object.keys(bw).forEach(function (k) {
+                if (!db.wrong[k]) {
+                  var e = bw[k] || {};
+                  db.wrong[k] = { pid: e.pid, n: e.n, at: e.at || Date.now(), src: srcName, srcAt: pack.exportedAt || 0 };
+                  added++;
+                }
+              });
+              var st = d.settings || {};
+              st.deviceName = curName; /* 设备身份保持本机的，不跟备份走 */
               db = {
-                papers: data.papers || {}, wrong: data.wrong || {}, fav: data.fav || {},
-                overrides: data.overrides || {}, history: data.history || [], settings: data.settings || {}
+                papers: d.papers || {}, wrong: db.wrong, fav: d.fav || {},
+                overrides: d.overrides || {}, history: d.history || [], settings: st
               };
-              if (data.temp) db.temp = data.temp;
+              if (d.temp) db.temp = d.temp;
               memOnly = false;
               save();
               lastResult = null;
@@ -2686,14 +2736,16 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
               render();
               var hasUndone = false;
               Object.keys(db.papers).forEach(function (pid) {
-                var st = db.papers[pid];
-                if (st.sessions) Object.keys(st.sessions).forEach(function (m) {
-                  var ms = st.sessions[m];
-                  if (ms && !ms.done && ms.order && Object.keys(st.answers || {}).length) hasUndone = true;
+                var st2 = db.papers[pid];
+                if (st2.sessions) Object.keys(st2.sessions).forEach(function (m) {
+                  var ms = st2.sessions[m];
+                  if (ms && !ms.done && ms.order && Object.keys(st2.answers || {}).length) hasUndone = true;
                 });
               });
               if (db.temp && Object.keys(db.temp.answers || {}).length) hasUndone = true;
-              toast('进度已恢复（' + db.history.length + ' 条学习记录' + (hasUndone ? '，含未交卷进度，回首页点「继续」接着答' : '') + '）');
+              toast('进度已恢复（' + db.history.length + ' 条学习记录' +
+                (hasUndone ? '，含未交卷进度，回首页点「继续」接着答' : '') +
+                '），错题合并新增 ' + added + ' 道（来自「' + srcName + '」）');
             });
         };
         rd.readAsText(f, 'utf-8');
