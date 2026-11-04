@@ -120,6 +120,10 @@ a{color:var(--brand);text-decoration:none}
 .custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
 .custom-row input:focus{border-color:var(--brand)}
 .temp-resume{margin:-4px 0 18px;width:100%;text-align:left;background:var(--brand-soft);border:1.5px dashed var(--brand-2);color:var(--brand);font-weight:600}
+/* v3.9.2 清空回滚点条：清空作答后首页出现，可一键恢复或丢弃 */
+.clear-undo{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:-4px 0 18px;padding:10px 14px;background:var(--brand-soft);border:1.5px dashed var(--brand-2);border-radius:10px}
+.clear-undo .cu-text{flex:1;min-width:200px;font-size:13px;color:var(--brand);font-weight:600}
+.clear-undo .cu-btn{padding:7px 14px;font-size:13px;white-space:nowrap}
 .stat-block{display:flex;flex-direction:column;gap:8px;margin:10px 0 20px}
 .stat-row{display:flex;align-items:center;gap:10px;font-size:13.5px}
 .stat-row .stat-name{flex:0 0 200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1404,6 +1408,52 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     };
   }
 
+  /* v3.9.2 清空前自动备份：页内回滚点（可一键反悔）+ 备份文件下载 */
+  function makeClearUndo(p) {
+    var st = pstate(p.id);
+    db.clearUndo = {
+      pid: p.id, title: p.title, at: Date.now(),
+      answered: Object.keys(st.answers).length,
+      state: JSON.parse(JSON.stringify(st))   /* 深拷贝整卷状态：答案 / 标记 / 各模块会话进度 */
+    };
+  }
+  function restoreClearUndo() {
+    var u = db.clearUndo;
+    if (!u || !u.pid) return;
+    showModal('恢复清空前的作答？',
+      '将把「' + u.title + '」恢复到清空前的状态（已答 ' + (u.answered || 0) + ' 题）。注意：清空之后新做的作答会被覆盖。',
+      '恢复', function () {
+        db.papers[u.pid] = u.state;
+        delete db.clearUndo;
+        save(); render();
+        toast('已恢复清空前的作答（' + (u.answered || 0) + ' 题）');
+      }, '取消');
+  }
+  function discardClearUndo() {
+    showModal('丢弃回滚点？', '丢弃后「' + (db.clearUndo ? db.clearUndo.title : '') + '」清空前的作答将无法再恢复（下载的备份文件仍可用）。',
+      '丢弃', function () {
+        delete db.clearUndo;
+        save(); render();
+        toast('已丢弃回滚点');
+      }, '取消');
+  }
+  function buildClearUndo() {
+    var u = db.clearUndo;
+    if (!u || !u.pid) return null;
+    var bar = el('div', 'clear-undo');
+    var d = new Date(u.at);
+    bar.appendChild(el('span', 'cu-text',
+      '↩ 已清空「' + u.title + '」（此前已答 ' + (u.answered || 0) + ' 题，' +
+      pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + '），反悔可一键恢复'));
+    var rb = el('button', 'btn btn-primary cu-btn', '恢复作答');
+    rb.addEventListener('click', restoreClearUndo);
+    bar.appendChild(rb);
+    var dbtn = el('button', 'btn cu-btn', '丢弃');
+    dbtn.addEventListener('click', discardClearUndo);
+    bar.appendChild(dbtn);
+    return bar;
+  }
+
   /* 整卷开始；已有作答时弹「继续做 / 清空并开始 / 取消」 */
   function startPaperAll(p, mode) {
     var st = pstate(p.id);
@@ -1413,8 +1463,20 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     }
     showModal('本卷已有作答记录', '可以「继续做」保留本卷已答接着做，或「清空并开始」清空本卷全部已答答案与标记后重新做（错题本、收藏、历史成绩保留）。',
       '清空并开始', function () {
-        clearPaperAnswers(p.id);
-        beginSession(p.id, 'all', mode, { fresh: true, random: false });
+        /* v3.9.2 二次确认：清空前自动备份，反悔可恢复 */
+        showModal('确认清空并重新开始？',
+          '清空前会自动做两份备份：① 下载本机全部进度的备份文件（JSON）；② 在本页保存一个「回滚点」。' +
+          '然后才清空本卷全部已答答案与标记（错题本、收藏、历史成绩保留）。清空后反悔了，回到首页点「恢复作答」即可一键还原。',
+          '备份并清空', function () {
+            makeClearUndo(p);   /* 先拍快照（此时答案还未清） */
+            var d = new Date();
+            var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
+            downloadBlob(JSON.stringify({ backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: db }, null, 2),
+              'application/json', '练习进度备份_清空前_' + stamp + '.json');
+            clearPaperAnswers(p.id);
+            beginSession(p.id, 'all', mode, { fresh: true, random: false });
+            toast('已生成回滚点并清空，反悔可回首页恢复');
+          }, '取消');
       }, '取消', null,
       { text: '继续做', onClick: function () {
           var ms = st.sessions.all;
@@ -1662,6 +1724,8 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       var colL = el('div', 'h2-col h2-col-l');
       var colR = el('div', 'h2-col h2-col-r');
       colL.appendChild(main);
+      var cuB = buildClearUndo();
+      if (cuB) colL.appendChild(cuB);
       var trB = buildTempResume();
       if (trB) colL.appendChild(trB);
       colL.appendChild(buildKpis());
@@ -1676,6 +1740,8 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       s1.appendChild(el('span', null, '整套训练 / 考试做完全部题，也可按题型专项练'));
       grid.appendChild(s1);
       grid.appendChild(main);
+      var cuA = buildClearUndo();
+      if (cuA) grid.appendChild(cuA);
       var trA = buildTempResume();
       if (trA) grid.appendChild(trA);
 
