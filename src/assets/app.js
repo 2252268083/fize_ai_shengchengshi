@@ -1127,7 +1127,7 @@
         next = next.indexOf(L) >= 0 ? next.replace(L, '') : sortedLetters(next + L);
         if (sess.mode === 'practice' && sess.answers[q.key]) {
           var c9 = correctOf(q);
-          /* 答错的多选题允许重选，再点「确认」改正；已答对的不允许改 */
+      /* 答错的多选题允许重选，再点「确认」；选对则只收藏（v3.9.4），已答对的不允许改 */
           if (!(c9 && sess.answers[q.key] !== c9)) { toast('本题已作答，可「清空本题」后重选'); return; }
         }
         sess.pending[q.key] = next;
@@ -1141,8 +1141,8 @@
       if (sess.mode === 'practice' && sess.answers[q.key]) {
         var c8 = correctOf(q);
         if (c8 && sess.answers[q.key] !== c8) {
-          if (L === c8) { correctWrong(q, c8); return; }  /* 答错后点正确答案 → 改正并收场 */
-          toast('正确答案是 ' + c8 + '（已标绿），点绿色选项即可改正并收藏'); return;
+          if (L === c8) { favOnCorrect(q); return; }  /* v3.9.4 答错后点正确答案 → 只收藏不改正 */
+          toast('正确答案是 ' + c8 + '（已标绿），点绿色选项即可收藏'); return;
         }
         toast('本题已作答，可「清空本题」后重选'); return;
       }
@@ -1166,8 +1166,7 @@
       if (sess.persist) save();
     }
 
-    /* v3.9.3 自动收藏：改正同时把本题加进「我的收藏」，错题本移除后仍可在收藏答题区复习。
-       返回 true 表示本次是新加入收藏。 */
+    /* v3.9.3 自动收藏：把本题加进「我的收藏」。返回 true 表示本次是新加入收藏。 */
     function autoFav(q) {
       if (db.fav[q.key]) return false;
       db.fav[q.key] = { pid: q.pid, n: q.n, at: Date.now() };
@@ -1177,24 +1176,15 @@
       return true;
     }
 
-    /* 答错后点绿色正确答案：改正本题、移出错题本、立即收藏，短暂展示后自动进入下一题；
-       最后一题则交给 maybeAutoSubmit 弹交卷确认。 */
-    function correctWrong(q, c) {
-      setAnswer(q, c);
-      removeWrong(q);
-      var isNewFav = autoFav(q);
+    /* v3.9.4 答错后点绿色正确答案：只收藏，不改正——
+       答案保持你实际选的选项、错题本保留（交卷时按实际作答计分），
+       本题进入「我的收藏」，可在收藏答题区重刷；停留在原题不自动跳题。 */
+    function favOnCorrect(q) {
+      var isNew = autoFav(q);
       paintOptions();
       paintCard();
       paintFeedback();
-      var idx0 = sess.idx, wasLast = idx0 === sess.qs.length - 1;
-      var msg = isNewFav ? '已改正 ✓ 已收藏到「我的收藏」' : '已改正 ✓（本题已在收藏）';
-      toast(wasLast ? msg : msg + '，即将进入下一题');
-      setTimeout(function () {
-        /* 期间用户翻题/清空/交卷则不再自动前进 */
-        if (!sess || sess.done || sess.idx !== idx0 || sess.answers[q.key] !== c) return;
-        if (wasLast) maybeAutoSubmit();
-        else { sess.idx++; persistPos(); rebuildQuestion(); }
-      }, 700);
+      toast(isNew ? '已收藏到「我的收藏」✓' : '本题已在收藏');
     }
 
     function paintOptions() {
@@ -1216,7 +1206,7 @@
         else mk.textContent = '';
       });
       var b = $('[data-act="confirm-multi"]', node);
-      /* 未作答，或已答错（可重选后确认改正）时显示确认按钮 */
+      /* 未作答，或已答错（可重选后确认收藏）时显示确认按钮 */
       var needConfirm = sess.mode === 'practice' && q.t === 'multi' &&
         (!sess.answers[q.key] || (c && sess.answers[q.key] !== c));
       b.classList.toggle('hidden', !needConfirm);
@@ -1298,12 +1288,17 @@
       var q = cur();
       var v = pendingOf(q);
       if (!v) { toast('请先选择至少一个选项'); return; }
-      var prev = sess.answers[q.key] || '';   /* v3.9.3 改正前答案：答错后改对同样自动收藏 */
-      setAnswer(q, v);
+      var prev = sess.answers[q.key] || '';
       var c = correctOf(q);
+      /* v3.9.4 已答错的多选：重选后再确认，若选中的正是正确答案 → 只收藏不改正
+         （答案保持原错项、错题本保留、停在原题），与单选点绿色答案行为一致 */
+      if (sess.mode === 'practice' && c && prev && prev !== c && v === c) {
+        favOnCorrect(q);
+        return;
+      }
+      setAnswer(q, v);
       if (c && v === c) {
         removeWrong(q);
-        if (prev && prev !== c) toast(autoFav(q) ? '已改正 ✓ 已收藏到「我的收藏」' : '已改正 ✓（本题已在收藏）');
         if (autoNext()) return; // 多选确认后答对自动下一题
       } else if (c) { addWrong(q); }
       paintOptions(); paintCard(); paintFeedback();
