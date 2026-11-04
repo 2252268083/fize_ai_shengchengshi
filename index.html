@@ -2223,7 +2223,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
         render();
       }
       if (answered && !sess.done) {
-        showModal('暂时离开？', '作答进度会保存，下次点「继续」接着做。', '离开', leave, '继续答题');
+        showModal('暂时离开？', '作答进度会保存，下次点「继续」接着做。要换设备继续答，可到「答案管理」点「备份全部进度」，在另一台设备上「恢复备份」即可接着做（未交卷进度也包含在内）。', '离开', leave, '继续答题');
       } else leave();
     });
 
@@ -2835,7 +2835,8 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       var d = new Date();
       var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
       downloadBlob(JSON.stringify(db, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
-      toast('已导出全部进度（作答、错题、收藏、历史记录）');
+      var mid = db.temp && db.temp.order && Object.keys(db.temp.answers || {}).length ? '、未交卷的临时练习' : '';
+      toast('已导出全部进度（作答位置' + mid + '、错题、收藏、历史记录）——发到另一台设备「恢复备份」即可接着答');
     });
     $('[data-act="db-import"]', node).addEventListener('click', function () {
       var inp = document.createElement('input');
@@ -2863,7 +2864,16 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
               lastResult = null;
               route = 'home';
               render();
-              toast('进度已恢复（' + db.history.length + ' 条学习记录）');
+              var hasUndone = false;
+              Object.keys(db.papers).forEach(function (pid) {
+                var st = db.papers[pid];
+                if (st.sessions) Object.keys(st.sessions).forEach(function (m) {
+                  var ms = st.sessions[m];
+                  if (ms && !ms.done && ms.order && Object.keys(st.answers || {}).length) hasUndone = true;
+                });
+              });
+              if (db.temp && Object.keys(db.temp.answers || {}).length) hasUndone = true;
+              toast('进度已恢复（' + db.history.length + ' 条学习记录' + (hasUndone ? '，含未交卷进度，回首页点「继续」接着答' : '') + '）');
             });
         };
         rd.readAsText(f, 'utf-8');
