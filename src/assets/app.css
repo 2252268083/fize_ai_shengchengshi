@@ -517,3 +517,15 @@ select{
   .jump-bar .jump-input input{width:84px}
   .jump-bar .timer{margin-left:auto}
 }
+
+/* v3.8 错题本：练习场次筛选 + 来源练习标注 */
+.src-select{
+  padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:12.5px;
+  color:var(--ink);background:#fff;outline:none;max-width:100%;
+}
+.src-select:focus{border-color:var(--brand)}
+.origin-info{
+  display:inline-block;margin-left:8px;color:var(--ink-3);font-size:11px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:320px;vertical-align:1px;
+}
+@media (max-width:600px){.origin-info{display:block;margin:3px 0 0;max-width:100%}}

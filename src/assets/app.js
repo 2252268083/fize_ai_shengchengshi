@@ -1424,15 +1424,38 @@
     var body = $('#listBody', node);
     var filter = 'all';
     var reviewMode = false;
+    var srcFilter = 'all';
 
     function allQs() {
-      return Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); })
-        .map(function (k) { return QMAP[k]; })
-        .filter(Boolean);
+      /* 错题按加入时间升序：先从最早错的开始重练；收藏保持最新在前 */
+      return Object.keys(map).sort(function (a, b) {
+        return kind === 'wrong' ? (map[a].at || 0) - (map[b].at || 0) : (map[b].at || 0) - (map[a].at || 0);
+      }).map(function (k) { return QMAP[k]; }).filter(Boolean);
+    }
+    function sessLabel(h) {
+      return h.label || ((h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
+        ' · ' + (h.mod ? modLabel(h.mod) : '混合') + ' · ' + (h.mode === 'exam' ? '考试' : '练习'));
+    }
+    /* 该错题最近一次做错的那次练习（从最新交卷记录往前找第一个含该题答错的快照） */
+    function originOf(k) {
+      var q = QMAP[k]; if (!q) return null;
+      var c = correctOf(q); if (!c) return null;
+      for (var i = db.history.length - 1; i >= 0; i--) {
+        var h = db.history[i];
+        if (h.snap && h.snap[k] && h.snap[k] !== c) return h;
+      }
+      return null;
     }
     function visibleQs() {
       var arr = allQs();
       if (filter !== 'all') arr = arr.filter(function (q) { return q.t === filter; });
+      /* 按练习场次筛选：只看某一次练习产生的错题 */
+      if (kind === 'wrong' && srcFilter !== 'all') {
+        arr = arr.filter(function (q) {
+          var o = originOf(q.key);
+          return srcFilter === 'none' ? !o : (o && String(o.at) === srcFilter);
+        });
+      }
       return arr;
     }
     function fmtDate(t) {
@@ -1499,6 +1522,12 @@
         if (kind === 'wrong' && map[q.key] && map[q.key].src) {
           sub.appendChild(el('span', 'src-badge', '来自「' + map[q.key].src + '」的备份'));
         }
+        /* 该题最近一次做错来自哪次练习 */
+        if (kind === 'wrong' && !reviewMode) {
+          var o = originOf(q.key);
+          if (o) sub.appendChild(el('span', 'origin-info',
+            '来自练习：' + sessLabel(o) + '（' + fmtDate(o.at) + '）'));
+        }
         $('[data-act="row-go"]', row).addEventListener('click', function () {
           beginSet([q], PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n + ' 单题重练', 'practice');
         });
@@ -1529,16 +1558,58 @@
         reviewMode = false;
         tCur.classList.add('on'); tRev.classList.remove('on');
         filterRow.style.display = '';
+        srcSel.style.display = '';
+        fillSrc();
         paint();
       });
       tRev.addEventListener('click', function () {
         reviewMode = true;
         tRev.classList.add('on'); tCur.classList.remove('on');
         filterRow.style.display = 'none';
+        srcSel.style.display = 'none';
         paint();
       });
       tabRow.appendChild(tCur); tabRow.appendChild(tRev);
       $('.panel', node).insertBefore(tabRow, filterRow);
+
+      /* 按练习场次筛选当前错题 */
+      var srcSel = document.createElement('select');
+      srcSel.className = 'src-select';
+      srcSel.title = '只看某一次练习产生的错题';
+      function fillSrc() {
+        srcSel.innerHTML = '';
+        var opt0 = document.createElement('option');
+        opt0.value = 'all';
+        opt0.textContent = '全部练习';
+        srcSel.appendChild(opt0);
+        var byAt = {};
+        Object.keys(db.wrong).forEach(function (k) {
+          var o = originOf(k);
+          if (o) {
+            if (!byAt[o.at]) byAt[o.at] = { h: o, n: 0 };
+            byAt[o.at].n++;
+          }
+        });
+        var none = Object.keys(db.wrong).filter(function (k) { return !originOf(k); }).length;
+        Object.keys(byAt).sort(function (a, b) { return b - a; }).forEach(function (at) {
+          var x = byAt[at];
+          var op = document.createElement('option');
+          op.value = String(at);
+          op.textContent = sessLabel(x.h) + ' · ' + fmtDate(Number(at)) + '（' + x.n + ' 题）';
+          srcSel.appendChild(op);
+        });
+        if (none) {
+          var opN = document.createElement('option');
+          opN.value = 'none';
+          opN.textContent = '其他来源（备份导入等）· ' + none + ' 题';
+          srcSel.appendChild(opN);
+        }
+        if (srcFilter !== 'all' && srcFilter !== 'none' && !byAt[Number(srcFilter)]) srcFilter = 'all';
+        srcSel.value = srcFilter;
+      }
+      fillSrc();
+      srcSel.addEventListener('change', function () { srcFilter = srcSel.value; paint(); });
+      $('.panel', node).insertBefore(srcSel, filterRow);
     }
 
     $('[data-act="list-practice"]', node).addEventListener('click', function () {
@@ -1958,6 +2029,10 @@
     if (route !== 'quiz' || !sess) return;
     var tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    /* Ctrl/Alt/Win+字母是系统与浏览器快捷键（复制、收藏等），不拦截 */
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    /* 弹窗（交卷确认、三选弹窗等）打开时不响应选项快捷键 */
+    if ($('.modal-mask')) return;
     var k = String(e.key || '').toUpperCase();
     if (k.length === 1 && '1234'.indexOf(k) >= 0) {
       var q0 = cur();
