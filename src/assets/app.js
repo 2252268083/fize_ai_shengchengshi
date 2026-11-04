@@ -1142,7 +1142,7 @@
         var c8 = correctOf(q);
         if (c8 && sess.answers[q.key] !== c8) {
           if (L === c8) { correctWrong(q, c8); return; }  /* 答错后点正确答案 → 改正并收场 */
-          toast('正确答案是 ' + c8 + '（已标绿），点绿色选项即可改正'); return;
+          toast('正确答案是 ' + c8 + '（已标绿），点绿色选项即可改正并收藏'); return;
         }
         toast('本题已作答，可「清空本题」后重选'); return;
       }
@@ -1166,16 +1166,29 @@
       if (sess.persist) save();
     }
 
-    /* 答错后点绿色正确答案：改正本题、移出错题本，短暂展示「已改正」后自动进入下一题；
+    /* v3.9.3 自动收藏：改正同时把本题加进「我的收藏」，错题本移除后仍可在收藏答题区复习。
+       返回 true 表示本次是新加入收藏。 */
+    function autoFav(q) {
+      if (db.fav[q.key]) return false;
+      db.fav[q.key] = { pid: q.pid, n: q.n, at: Date.now() };
+      save();
+      var b = $('[data-act="fav"]', node);   /* 题目右上角星标同步点亮，不用等重绘 */
+      if (b) { b.textContent = '★'; b.classList.add('on'); }
+      return true;
+    }
+
+    /* 答错后点绿色正确答案：改正本题、移出错题本、立即收藏，短暂展示后自动进入下一题；
        最后一题则交给 maybeAutoSubmit 弹交卷确认。 */
     function correctWrong(q, c) {
       setAnswer(q, c);
       removeWrong(q);
+      var isNewFav = autoFav(q);
       paintOptions();
       paintCard();
       paintFeedback();
       var idx0 = sess.idx, wasLast = idx0 === sess.qs.length - 1;
-      toast(wasLast ? '已改正 ✓' : '已改正 ✓，即将进入下一题');
+      var msg = isNewFav ? '已改正 ✓ 已收藏到「我的收藏」' : '已改正 ✓（本题已在收藏）';
+      toast(wasLast ? msg : msg + '，即将进入下一题');
       setTimeout(function () {
         /* 期间用户翻题/清空/交卷则不再自动前进 */
         if (!sess || sess.done || sess.idx !== idx0 || sess.answers[q.key] !== c) return;
@@ -1285,10 +1298,12 @@
       var q = cur();
       var v = pendingOf(q);
       if (!v) { toast('请先选择至少一个选项'); return; }
+      var prev = sess.answers[q.key] || '';   /* v3.9.3 改正前答案：答错后改对同样自动收藏 */
       setAnswer(q, v);
       var c = correctOf(q);
       if (c && v === c) {
         removeWrong(q);
+        if (prev && prev !== c) toast(autoFav(q) ? '已改正 ✓ 已收藏到「我的收藏」' : '已改正 ✓（本题已在收藏）');
         if (autoNext()) return; // 多选确认后答对自动下一题
       } else if (c) { addWrong(q); }
       paintOptions(); paintCard(); paintFeedback();
