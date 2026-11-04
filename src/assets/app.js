@@ -49,6 +49,7 @@
     d.papers = d.papers || {};
     d.wrong = d.wrong || {};
     d.fav = d.fav || {};
+    d.notes = d.notes || {};     /* 逐题笔记：{'T#123': {t:'正文', at, up}}，随备份导出/导入 */
     d.overrides = d.overrides || {};
     d.history = d.history || [];
     d.settings = d.settings || {};
@@ -408,6 +409,7 @@
   }
 
   function persistPos() {
+    if (sess && sess.flushNote) { try { sess.flushNote(); } catch (e) {} }  /* 笔记兜底落库 */
     if (sess && sess.persist && sess.ms) { sess.ms.idx = sess.idx; sess.ms.at = Date.now(); save(); }
     if (sess && sess.tempKey) {
       /* 临时题组（全库随机/自定义题库）断点：存到 db.temp，首页可继续 */
@@ -460,6 +462,30 @@
     if (db.wrong[q.key]) { delete db.wrong[q.key]; save(); }
   }
 
+  /* ---------------- notes ----------------
+     逐题笔记：key 与错题本/收藏同一套（T#n），所以不论是整套、题型模块、
+     错题重练、收藏重练、全库随机还是模拟考试，做到同一道题都能看到同一份笔记。 */
+  function noteOf(q) {
+    var n = db.notes[q.key];
+    return (n && n.t) ? n : null;
+  }
+  function noteCount() {
+    return Object.keys(db.notes).filter(function (k) { return db.notes[k] && db.notes[k].t; }).length;
+  }
+  /* 空文本等于删除笔记；返回 true 表示有内容落库 */
+  function setNote(q, text) {
+    var t = String(text == null ? '' : text).replace(/\s+$/, '');
+    if (!t.trim()) {
+      if (db.notes[q.key]) { delete db.notes[q.key]; save(); }
+      return false;
+    }
+    var old = db.notes[q.key];
+    if (old && old.t === t) return true;   /* 内容没变：不重复写盘（翻题时每次都会 flush） */
+    db.notes[q.key] = { pid: q.pid, n: q.n, t: t, at: (old && old.at) || Date.now(), up: Date.now() };
+    save();
+    return true;
+  }
+
   /* 某次练习记录中答错的题（key 数组）；基于答题快照与当前答案计算 */
   function wrongKeysOf(h) {
     if (!h || !h.snap) return [];
@@ -496,6 +522,7 @@
     else if (route === 'result') node = viewResult();
     else if (route === 'wrong') node = viewList('wrong');
     else if (route === 'fav') node = viewList('fav');
+    else if (route === 'notes') node = viewNotes();
     else if (route === 'review') node = viewReview();
     else if (route === 'history') node = viewHistory();
     else if (route === 'stats') node = viewStats();
@@ -520,6 +547,9 @@
     });
     var wc = Object.keys(db.wrong).length;
     document.getElementById('navWrong').textContent = wc ? '(' + wc + ')' : '';
+    var nc = noteCount();
+    var nn = document.getElementById('navNotes');
+    if (nn) nn.textContent = nc ? '(' + nc + ')' : '';
   }
 
   /* ---------------- home ---------------- */
@@ -678,6 +708,9 @@
     }));
     wrap.appendChild(makeMiniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
       route = 'fav'; render();
+    }));
+    wrap.appendChild(makeMiniCard('📝', '', '我的笔记', '已记 ' + noteCount() + ' 道题', function () {
+      route = 'notes'; render();
     }));
     wrap.appendChild(makeMiniCard('📊', 'ok', '正确率统计', '按题型 / 知识点看正确率', function () {
       route = 'stats'; render();
@@ -1058,6 +1091,7 @@
     });
 
     function rebuildQuestion() {
+      noteFlush();   /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
       var q = cur();
       // 分类切换栏：当前模块高亮
       $all('.jt', node).forEach(function (b) {
@@ -1084,7 +1118,71 @@
       paintOptions();
       paintCard();
       paintFeedback();
+      paintNote(false);   /* 换题：有笔记自动展开正文，没有则收起 */
       tick();
+    }
+
+    /* ---------- 逐题笔记（写、改、自动保存） ---------- */
+    var noteTimer = null;
+    var noteKey = null;    /* 当前笔记框绑定的题 key，防止慢一拍的保存写串题 */
+
+    function noteTime(t) {
+      var d = new Date(t || Date.now());
+      return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+
+    /* open：true 强制打开编辑框；false/省略 按「有无笔记」决定是否展示正文 */
+    function paintNote(open) {
+      var q = cur(), n = noteOf(q);
+      var box = $('#qNote', node), view = $('#noteView', node), ta = $('#noteText', node);
+      var badge = $('#noteBadge', node), btn = $('#btnNoteToggle', node);
+      if (!box) return;
+      /* 同一题重复重绘（如答错后回到原题）时保留正在编辑的内容，不要把用户刚打的字冲掉 */
+      var sameEdit = (noteKey === q.key) && box.classList.contains('editing');
+      noteKey = q.key;
+      view.textContent = n ? n.t : '';
+      view.classList.toggle('hidden', !n);
+      box.classList.toggle('has-note', !!n);
+      badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at)) : '';
+      btn.textContent = n ? '编辑' : '写笔记';
+      if (!sameEdit) ta.value = n ? n.t : '';
+      box.classList.toggle('editing', sameEdit ? true : !!open);
+    }
+
+    /* 离开当前题目前把编辑框内容落库（空文本＝删笔记）；无变化不写盘 */
+    function noteFlush() {
+      if (noteTimer) { clearTimeout(noteTimer); noteTimer = null; }
+      var ta = $('#noteText', node);
+      if (!ta || !noteKey) return false;
+      var q = QMAP[noteKey];
+      if (!q) return false;
+      var had = !!noteOf(q);
+      var keep = setNote(q, ta.value);
+      var badge = $('#noteBadge', node), btn = $('#btnNoteToggle', node);
+      var n = noteOf(q);
+      if (badge) badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at)) : '';
+      if (btn) btn.textContent = n ? '编辑' : '写笔记';
+      var box = $('#qNote', node);
+      if (box) box.classList.toggle('has-note', !!n);
+      var view = $('#noteView', node);
+      if (view) { view.textContent = n ? n.t : ''; view.classList.toggle('hidden', !n); }
+      return had !== keep;
+    }
+
+    /* 答错时自动展开笔记框（只在本题还没写过笔记、且不是考试模式时），不抢焦点 */
+    function noteOnWrong(q) {
+      if (sess.mode !== 'practice') return;
+      if (noteOf(q)) return;
+      paintNote(true);
+      var ta = $('#noteText', node);
+      if (ta) {
+        ta.placeholder = '这题答错了，记一笔：错在哪、正确答案怎么记、下次别再踩……';
+        var hint = $('#noteHint', node);
+        if (hint) hint.textContent = '答错自动展开 · 停止输入后自动保存';
+      }
+      var btn = $('#btnNoteToggle', node);
+      if (btn) btn.classList.add('pulse');
+      setTimeout(function () { if (btn) btn.classList.remove('pulse'); }, 1200);
     }
 
     // build answer card once —— 按题型固定分组（单选→多选→判断），cell 用 data-idx 对应题序
@@ -1152,7 +1250,7 @@
         if (c && L === c) {
           removeWrong(q);
           if (autoNext()) return; // 答对自动下一题
-        } else if (c) { addWrong(q); }
+        } else if (c) { addWrong(q); noteOnWrong(q); }
         maybeAutoSubmit();  // 最后一题答完自动引导交卷
       }
       paintOptions();
@@ -1284,6 +1382,56 @@
       else db.fav[q.key] = { pid: q.pid, n: q.n, at: Date.now() };
       save(); rebuildQuestion();
     });
+
+    /* ---- 笔记交互 ---- */
+    sess.flushNote = noteFlush;   /* 退出/切页/关页面时由 persistPos 兜底落库 */
+    var noteBox = $('#qNote', node);
+    if (noteBox) {
+      var ta = $('#noteText', node);
+      $('#btnNoteToggle', node).addEventListener('click', function () {
+        var willOpen = !noteBox.classList.contains('editing');
+        if (!willOpen) noteFlush();          /* 收起＝保存 */
+        noteBox.classList.toggle('editing', willOpen);
+        if (willOpen) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      });
+      /* 停止输入 700ms 自动保存，换题/退出也不会丢 */
+      ta.addEventListener('input', function () {
+        if (noteTimer) clearTimeout(noteTimer);
+        var hint = $('#noteHint', node);
+        if (hint) hint.textContent = '正在保存…';
+        noteTimer = setTimeout(function () {
+          noteTimer = null;
+          noteFlush();
+          var h = $('#noteHint', node);
+          if (h) h.textContent = '已自动保存 · Ctrl+Enter 收起';
+        }, 700);
+      });
+      ta.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          noteFlush();
+          noteBox.classList.remove('editing');
+          toast(noteOf(cur()) ? '笔记已保存' : '笔记已清空');
+        }
+      });
+      $('[data-act="note-save"]', node).addEventListener('click', function () {
+        noteFlush();
+        noteBox.classList.remove('editing');
+        toast(noteOf(cur()) ? '笔记已保存' : '笔记已清空');
+      });
+      $('[data-act="note-del"]', node).addEventListener('click', function () {
+        var q = cur();
+        if (!noteOf(q)) { noteBox.classList.remove('editing'); return; }
+        showModal('删除本题笔记？', '将清空 #' + q.n + ' 的笔记内容（其他题不受影响）。', '删除', function () {
+          if (noteTimer) { clearTimeout(noteTimer); noteTimer = null; }
+          delete db.notes[q.key];
+          save();
+          paintNote(false);
+          noteBox.classList.remove('editing');
+          toast('笔记已删除');
+        });
+      });
+    }
     $('[data-act="confirm-multi"]', node).addEventListener('click', function () {
       var q = cur();
       var v = pendingOf(q);
@@ -1300,7 +1448,7 @@
       if (c && v === c) {
         removeWrong(q);
         if (autoNext()) return; // 多选确认后答对自动下一题
-      } else if (c) { addWrong(q); }
+      } else if (c) { addWrong(q); noteOnWrong(q); }
       paintOptions(); paintCard(); paintFeedback();
       maybeAutoSubmit();  // 最后一题答完自动引导交卷
     });
@@ -1648,6 +1796,14 @@
           if (o) sub.appendChild(el('span', 'origin-info',
             '来自练习：' + sessLabel(o) + '（' + fmtDate(o.at) + '）'));
         }
+        /* 写过笔记的题：列表里直接把笔记摘要带出来（点「查看」进单题即可改） */
+        var nt = db.notes[q.key];
+        if (nt && nt.t) {
+          var nb = el('span', 'note-badge-row',
+            '📝 ' + (nt.t.length > 70 ? nt.t.slice(0, 70) + '…' : nt.t));
+          nb.title = nt.t;
+          sub.appendChild(nb);
+        }
         $('[data-act="row-go"]', row).addEventListener('click', function () {
           beginSet([q], PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n + ' 单题重练', 'practice');
         });
@@ -1768,6 +1924,155 @@
         save(); paint();
       });
     });
+    paint();
+    return node;
+  }
+
+  /* ---------------- 我的笔记（只看写过笔记的题，可就地改） ---------------- */
+  function viewNotes() {
+    var node = cloneTpl('tpl-list');
+    $('#listTitle', node).textContent = '我的笔记';
+    var desc = $('#listDesc', node);
+    var body = $('#listBody', node);
+    var ops = $('#listOps', node);
+    var filter = 'all';
+
+    function fmt(t) {
+      var d = new Date(t || Date.now());
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+    function allQs() {
+      return Object.keys(db.notes)
+        .filter(function (k) { return db.notes[k] && db.notes[k].t; })
+        .sort(function (a, b) {
+          return (db.notes[b].up || db.notes[b].at || 0) - (db.notes[a].up || db.notes[a].at || 0);
+        })
+        .map(function (k) { return QMAP[k]; })
+        .filter(Boolean);
+    }
+
+    /* 操作区：重练 / 打印带笔记的清单 / 清空 */
+    ops.innerHTML = '';
+    var bPrac = el('button', 'btn btn-primary', '重练有笔记的题');
+    var bPrint = el('button', 'btn', '🖨 打印笔记');
+    var bClear = el('button', 'btn', '清空全部笔记');
+    bClear.style.color = 'var(--bad)';
+    ops.appendChild(bPrac); ops.appendChild(bPrint); ops.appendChild(bClear);
+
+    function paint() {
+      body.innerHTML = '';
+      var all = allQs();
+      var qs = all.filter(function (q) { return filter === 'all' || q.t === filter; });
+      desc.textContent = '共 ' + all.length + ' 道题写了笔记，按最近修改排序。' +
+        '答题时题卡下方就是笔记框，答错会自动展开；笔记跟着题目走，任何模式做到同一题都能看到，' +
+        '备份/恢复也会一起带走。';
+      if (!qs.length) {
+        body.appendChild(el('div', 'empty', all.length
+          ? '该题型下没有笔记'
+          : '还没有笔记。答题时在题卡下方点「写笔记」记一笔，下次做到这题会自动显示 📝'));
+        return;
+      }
+      qs.forEach(function (q) {
+        var n = db.notes[q.key];
+        var row = el('div', 'row note-row');
+        var tag = el('span', 'tag', typeName(q.t));
+        tag.className = typeTagClass(q.t);
+        row.appendChild(tag);
+
+        var grow = el('div', 'grow');
+        grow.appendChild(el('div', 'qtext', '#' + q.n + ' · ' + q.q));
+        var txt = el('div', 'qsub note-text', n.t);
+        grow.appendChild(txt);
+        grow.appendChild(el('div', 'note-when', '更新于 ' + fmt(n.up || n.at)));
+        row.appendChild(grow);
+
+        var bGo = el('button', 'btn btn-sm btn-ghost', '去答题');
+        bGo.addEventListener('click', function () {
+          beginSet([q], '#' + q.n + ' 笔记题重练', 'practice');
+        });
+        var editing = false, ta = null;
+        var bEdit = el('button', 'btn btn-sm btn-ghost', '编辑');
+        bEdit.addEventListener('click', function () {
+          if (!editing) {
+            editing = true;
+            ta = document.createElement('textarea');
+            ta.className = 'note-inline';
+            ta.spellcheck = false;
+            ta.value = n.t;
+            txt.classList.add('hidden');
+            grow.insertBefore(ta, txt);
+            ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length);
+            bEdit.textContent = '保存';
+            bEdit.classList.remove('btn-ghost');
+            bEdit.classList.add('btn-primary');
+            return;
+          }
+          if (!setNote(q, ta.value)) { delete db.notes[q.key]; save(); }
+          toast(noteOf(q) ? '笔记已保存' : '笔记已清空');
+          paint();
+        });
+        var bDel = el('button', 'btn btn-sm btn-ghost', '删除');
+        bDel.addEventListener('click', function () {
+          showModal('删除这条笔记？', '#' + q.n + ' 的笔记内容将被清空（题目本身不受影响）。', '删除', function () {
+            delete db.notes[q.key];
+            save(); paint();
+            toast('笔记已删除');
+          });
+        });
+        row.appendChild(bGo); row.appendChild(bEdit); row.appendChild(bDel);
+        body.appendChild(row);
+      });
+    }
+
+    var filterRow = el('div', 'filter-row');
+    [['all', '全部'], ['single', '单选'], ['multi', '多选'], ['judge', '判断']].forEach(function (f) {
+      var b = el('button', 'fbtn' + (f[0] === 'all' ? ' on' : ''), f[1]);
+      b.addEventListener('click', function () {
+        filter = f[0];
+        $all('.fbtn', filterRow).forEach(function (x) { x.classList.toggle('on', x === b); });
+        paint();
+      });
+      filterRow.appendChild(b);
+    });
+    $('.panel', node).insertBefore(filterRow, body);
+
+    bPrac.addEventListener('click', function () {
+      var qs = allQs().filter(function (q) { return filter === 'all' || q.t === filter; });
+      if (!qs.length) { toast('还没有笔记'); return; }
+      beginSet(qs, '笔记重练（' + qs.length + ' 题）', 'practice');
+    });
+    bPrint.addEventListener('click', function () {
+      var qs = allQs().filter(function (q) { return filter === 'all' || q.t === filter; });
+      if (!qs.length) { toast('还没有笔记'); return; }
+      var rows = qs.map(function (q) {
+        var n = db.notes[q.key] || {};
+        var c = correctOf(q);
+        return '<div style="border-bottom:1px dashed #ccc;padding:10px 0;page-break-inside:avoid">' +
+          '<p style="margin:0 0 4px;font-weight:bold">#' + q.n + ' [' + typeName(q.t) + '] ' + escHtml(q.q) + '</p>' +
+          '<p style="margin:2px 0;color:#0f7a3d">参考答案：' + escHtml(c || '未收录') + '</p>' +
+          '<p style="margin:2px 0;color:#1e40af">📝 笔记：' + escHtml(n.t || '') + '</p></div>';
+      }).join('');
+      var w = window.open('', '_blank');
+      if (!w) { toast('浏览器拦截了弹窗，请允许弹窗后重试'); return; }
+      w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>我的笔记</title></head>' +
+        '<body style="font-family:\'Microsoft YaHei\',sans-serif;font-size:12pt;line-height:1.7;max-width:800px;margin:0 auto">' +
+        '<h2>我的笔记（' + qs.length + ' 题）· 人工智能训练师理论题库</h2>' + rows + '</body></html>');
+      w.document.close();
+      w.focus();
+      setTimeout(function () { w.print(); }, 300);
+    });
+    bClear.addEventListener('click', function () {
+      var n = allQs().length;
+      if (!n) return;
+      showModal('清空全部笔记？', '共 ' + n + ' 条笔记将被删除，该操作不可撤销（建议先「备份全部进度」）。', '清空', function () {
+        db.notes = {};
+        save(); paint();
+        toast('已清空全部笔记');
+      });
+    });
+
     paint();
     return node;
   }
@@ -2045,7 +2350,7 @@
       var pack = { backupVer: 2, deviceName: deviceName(), exportedAt: Date.now(), db: db };
       downloadBlob(JSON.stringify(pack, null, 2), 'application/json', '练习进度备份_' + stamp + '.json');
       var mid = db.temp && db.temp.order && Object.keys(db.temp.answers || {}).length ? '、未交卷的临时练习' : '';
-      toast('已导出全部进度（作答位置' + mid + '、错题、收藏、历史记录）——发到另一台设备「恢复备份」即可接着答，错题会合并进对方错题本');
+      toast('已导出全部进度（作答位置' + mid + '、错题、收藏、笔记 ' + noteCount() + ' 条、历史记录）——发到另一台设备「恢复备份」即可接着答，错题与笔记会合并进对方');
     });
     $('[data-act="db-import"]', node).addEventListener('click', function () {
       var inp = document.createElement('input');
@@ -2067,7 +2372,8 @@
           var srcName = pack.deviceName || '备份文件';
           showModal('恢复备份？',
             '来自「' + srcName + '」的备份。作答进度、收藏、历史记录、答案修改将覆盖为备份内容；' +
-            '错题本为<b>合并</b>：备份里的错题逐道加入（标记为来自「' + srcName + '」的备份错题），当前已有错题全部保留、不覆盖。',
+            '错题本为<b>合并</b>：备份里的错题逐道加入（标记为来自「' + srcName + '」的备份错题），当前已有错题全部保留、不覆盖。' +
+            '笔记同样<b>合并</b>：同一题以备份里的笔记为准，本机其他笔记保留。',
             '合并恢复', function () {
               var curName = deviceName();
               var added = 0;
@@ -2081,8 +2387,18 @@
               });
               var st = d.settings || {};
               st.deviceName = curName; /* 设备身份保持本机的，不跟备份走 */
+              /* 笔记合并：备份里有的题以备份内容为准，本机独有（备份里没有）的笔记保留 */
+              var mergedNotes = db.notes || {};
+              var noteIn = 0;
+              Object.keys(d.notes || {}).forEach(function (k) {
+                var e = d.notes[k];
+                if (!e || !e.t) return;
+                if (!mergedNotes[k]) noteIn++;
+                mergedNotes[k] = e;
+              });
               db = {
                 papers: d.papers || {}, wrong: db.wrong, fav: d.fav || {},
+                notes: mergedNotes,
                 overrides: d.overrides || {}, history: d.history || [], settings: st
               };
               if (d.temp) db.temp = d.temp;
@@ -2102,7 +2418,8 @@
               if (db.temp && Object.keys(db.temp.answers || {}).length) hasUndone = true;
               toast('进度已恢复（' + db.history.length + ' 条学习记录' +
                 (hasUndone ? '，含未交卷进度，回首页点「继续」接着答' : '') +
-                '），错题合并新增 ' + added + ' 道（来自「' + srcName + '」）');
+                '），错题合并新增 ' + added + ' 道（来自「' + srcName + '」）' +
+                (noteIn ? '，笔记新增 ' + noteIn + ' 条' : '') + '，当前共 ' + noteCount() + ' 条笔记');
             });
         };
         rd.readAsText(f, 'utf-8');
@@ -2110,8 +2427,8 @@
       inp.click();
     });
     $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
-      showModal('重置全部进度？', '将清空题库的作答记录、错题本、收藏与历史成绩（答案修改也会清除）。', '全部清空', function () {
-        db.papers = {}; db.wrong = {}; db.fav = {}; db.history = []; db.overrides = {};
+      showModal('重置全部进度？', '将清空题库的作答记录、错题本、收藏、笔记与历史成绩（答案修改也会清除）。', '全部清空', function () {
+        db.papers = {}; db.wrong = {}; db.fav = {}; db.notes = {}; db.history = []; db.overrides = {};
         save(); lastResult = null; refresh(); toast('已重置');
       });
     });
@@ -2202,6 +2519,7 @@
         sess = null;
         route = 'home';
       } else if (nav === 'wrong') { route = 'wrong'; }
+      else if (nav === 'notes') { route = 'notes'; }
       else if (nav === 'key') { route = 'key'; }
       render();
     });

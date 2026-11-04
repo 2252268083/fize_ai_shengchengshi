@@ -22,6 +22,7 @@
     <div class="spacer"></div>
     <button class="top-link" data-nav="home">首页</button>
     <button class="top-link" data-nav="wrong">错题本 <span id="navWrong"></span></button>
+    <button class="top-link" data-nav="notes">笔记 <span id="navNotes"></span></button>
     <button class="top-link" data-nav="key">答案管理</button>
   </div>
 </header>
@@ -122,6 +123,26 @@
         <h2 class="q-stem" id="qStem"></h2>
         <div class="opts" id="qOpts"></div>
         <div class="feedback hidden" id="qFeedback"></div>
+        <div class="note-box" id="qNote">
+          <div class="note-head">
+            <span class="note-ico">📝</span>
+            <span class="note-title">我的笔记</span>
+            <span class="note-badge" id="noteBadge"></span>
+            <span class="spacer"></span>
+            <button class="btn btn-sm" data-act="note-toggle" id="btnNoteToggle">写笔记</button>
+          </div>
+          <div class="note-view" id="noteView"></div>
+          <div class="note-edit" id="noteEdit">
+            <textarea id="noteText" rows="3" spellcheck="false"
+              placeholder="记一笔：为什么做错、怎么记、易混点……（停止输入后自动保存，换题也不会丢）"></textarea>
+            <div class="note-ops">
+              <span class="hint" id="noteHint">自动保存 · Ctrl+Enter 收起</span>
+              <span class="spacer"></span>
+              <button class="btn btn-sm" data-act="note-del">删除笔记</button>
+              <button class="btn btn-primary btn-sm" data-act="note-save">保存</button>
+            </div>
+          </div>
+        </div>
         <div class="q-foot">
           <button class="btn btn-sm" data-act="confirm-multi" id="btnConfirmMulti">确认作答</button>
           <button class="btn btn-sm" data-act="mark" id="btnMark">标记</button>
