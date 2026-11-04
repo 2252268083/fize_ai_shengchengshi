@@ -258,17 +258,16 @@
   var tickTimer = null;
   var reviewH = null;
 
-  /* ---------------- 布局方案：classic（经典）/ a（主操作区）/ b（左右双栏） ---------------- */
-  var LAYOUTS = ['classic', 'a', 'b'];
-  var LAYOUT_NAME = { classic: '经典', a: '新版A', b: '新版B' };
+  /* ---------------- 布局方案：a（主操作区）/ b（左右双栏），经典版已移除 ---------------- */
+  var LAYOUTS = ['a', 'b'];
+  var LAYOUT_NAME = { a: 'A·主操作区', b: 'B·双栏' };
   var LAYOUT_DESC = {
-    classic: '经典布局：hero + 卷卡片网格',
-    a: '新版A：单卷满宽主操作区，主入口全部收进首屏',
-    b: '新版B：左侧主训练区 + 右侧工具栏，信息密度更高'
+    a: '布局A：单卷满宽主操作区，主入口全部收进首屏',
+    b: '布局B：左侧主训练区 + 右侧工具栏，信息密度更高'
   };
   function layout() {
     var v = db.settings && db.settings.layout;
-    return LAYOUTS.indexOf(v) >= 0 ? v : 'classic';
+    return LAYOUTS.indexOf(v) >= 0 ? v : 'a';
   }
   function applyLayoutAttr() {
     document.body.setAttribute('data-layout', layout());
@@ -681,13 +680,16 @@
 
     var right = el('div', 'mc-right');
     var bExam = el('button', 'btn btn-primary', '开始考试');
+    bExam.setAttribute('data-act', 'card-exam');
     bExam.addEventListener('click', function () { startPaperAll(p, 'exam'); });
     right.appendChild(bExam);
     var bPrac = el('button', 'btn', '练习模式');
+    bPrac.setAttribute('data-act', 'card-practice');
     bPrac.addEventListener('click', function () { startPaperAll(p, 'practice'); });
     right.appendChild(bPrac);
     var bMock = el('button', 'btn', '模拟考试');
     bMock.title = '随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟';
+    bMock.setAttribute('data-act', 'card-mock');
     bMock.addEventListener('click', function () { startMockExam(); });
     right.appendChild(bMock);
 
@@ -698,6 +700,7 @@
     var foot = el('div', 'mc-foot');
     if (st.best !== null) foot.appendChild(el('span', 'mc-best', '最高分 ' + st.best));
     var rnd = el('button', 'btn btn-sm btn-ghost', '🎲 全库随机');
+    rnd.setAttribute('data-act', 'random-exam');
     rnd.addEventListener('click', function () { startRandomExam(); });
     foot.appendChild(rnd);
     if (st.recent) {
@@ -708,6 +711,7 @@
       foot.appendChild(r);
     }
     var mods = el('button', 'btn btn-sm btn-ghost', '按题型练习 →');
+    mods.setAttribute('data-act', 'card-modules');
     mods.addEventListener('click', function () { openPaper(p.id, pick.mode); });
     foot.appendChild(mods);
     card.appendChild(foot);
@@ -728,6 +732,7 @@
     inp.placeholder = '例如：1-50、120、850-860、1081';
     row.appendChild(inp);
     var btn = el('button', 'btn btn-primary', '开始训练');
+    btn.setAttribute('data-act', 'custom-start');
     btn.addEventListener('click', function () { startCustomSet(inp.value); });
     row.appendChild(btn);
     box.appendChild(row);
@@ -756,75 +761,7 @@
 
   function viewHome() {
     applyLayoutAttr();
-    return layout() === 'classic' ? viewHomeClassic() : viewHome2();
-  }
-
-  /* ---------- 经典布局（保持原样） ---------- */
-  function viewHomeClassic() {
-    var node = cloneTpl('tpl-home');
-    var grid = $('#paperGrid', node);
-    var mini = $('#miniGrid', node);
-
-    PAPERS.forEach(function (p) {
-      var card = cloneTpl('tpl-paper-card');
-      var st = paperStats(p);
-      $('.p-title', card).textContent = p.title;
-      $('.p-meta', card).textContent = st.total + ' 题 · 满分 100';
-      $('.p-score', card).textContent = st.best === null ? '—' : String(st.best);
-      $('.p-done', card).textContent = String(st.done);
-
-      var resume = $('.p-resume', card);
-      if (st.recent) {
-        resume.classList.remove('hidden');
-        resume.textContent = '继续：' + modLabel(st.recentMod) + ' · ' + (st.recent.mode === 'practice' ? '练习' : '考试') +
-          ' · ' + (st.recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, st.recentMod) + '/' + (st.recent.total || 0);
-        resume.addEventListener('click', function () { beginSession(p.id, st.recentMod, st.recent.mode || 'exam', {}); });
-      }
-      $('.btn-primary', card).addEventListener('click', function () { startPaperAll(p, 'exam'); });
-      $('[data-act="card-practice"]', card).addEventListener('click', function () { startPaperAll(p, 'practice'); });
-      $('[data-act="card-mock"]', card).addEventListener('click', function () { startMockExam(); });
-      $('[data-act="card-modules"]', card).addEventListener('click', function () { openPaper(p.id, pick.mode); });
-      grid.appendChild(card);
-    });
-
-    mini.appendChild(makeMiniCard('🎲', '', '全库随机练习', '全库 ' + ALL.length + ' 题随机 · 不限时练完', function () {
-      startRandomExam();
-    }));
-    mini.appendChild(makeMiniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
-      route = 'wrong'; render();
-    }));
-    mini.appendChild(makeMiniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
-      route = 'fav'; render();
-    }));
-    mini.appendChild(makeMiniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
-      route = 'history'; render();
-    }));
-    mini.appendChild(makeMiniCard('📊', 'ok', '正确率统计', '按题型/知识点看正确率', function () {
-      route = 'stats'; render();
-    }));
-
-    var heroBtn = $('[data-act="random-exam"]', node);
-    if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
-
-    var tr = buildTempResume();
-    if (tr) grid.parentNode.insertBefore(tr, grid.nextSibling);
-
-    var customBtn = $('[data-act="custom-start"]', node);
-    var customInput = $('#customNos', node);
-    customBtn.addEventListener('click', function () { startCustomSet(customInput.value); });
-    customInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); startCustomSet(customInput.value); }
-    });
-
-    var kpis = $('#homeKpis', node);
-    var tmpK = buildKpis();
-    while (tmpK.firstChild) kpis.appendChild(tmpK.firstChild);
-
-    $('[data-act="random-exam"]', node).addEventListener('click', function () { startRandomExam(); });
-    $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
-    $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
-    paintLayoutBtn(node);
-    return node;
+    return viewHome2();
   }
 
   /* ---------- 新版布局（A 单列 / B 双栏，共用 DOM，靠 CSS 分流） ---------- */

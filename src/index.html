@@ -30,51 +30,6 @@
 <div class="toast" id="toast"></div>
 <div id="modalRoot"></div>
 
-<!-- ============ 首页 · 经典布局 ============ -->
-<template id="tpl-home">
-  <section class="view-enter">
-    <div class="layout-bar">
-      <button class="layout-switch" data-act="layout-cycle"></button>
-    </div>
-    <div class="hero">
-      <h1>理论题库 · 训练与考试</h1>
-      <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
-      <div class="hero-chips">
-        <span class="chip">官方题库</span>
-        <span class="chip">共 1445 题</span>
-        <span class="chip">单选 849 · 多选 231 · 判断 365</span>
-        <span class="chip">含知识点与解析</span>
-      </div>
-      <div class="hero-actions">
-        <button class="btn btn-primary" data-act="random-exam">全库随机练习（1445 题）</button>
-        <button class="btn btn-ghost" data-act="open-wrong">错题重练</button>
-      </div>
-    </div>
-    <div class="notice ok" id="notice">
-      <span>✅</span>
-      <div><b>官方题库已收录：</b>单选 849 / 多选 231 / 判断 365，共 1445 题，答案提取自题库原文的【答案】标注（2026-10-27），部分题目附知识点与解析。如后续有官方更正，可在「答案管理」中粘贴覆盖。</div>
-    </div>
-    <div class="section-title"><h2>开始训练</h2><span>整套训练/考试做完全部题，也可按题型专项练</span></div>
-    <div class="paper-grid" id="paperGrid"></div>
-    <div class="section-title"><h2>自定义题库训练</h2><span>输入题号或范围，用「、」分隔，只练你想练的题</span></div>
-    <div class="panel custom-panel">
-      <div class="custom-row">
-        <input id="customNos" spellcheck="false" placeholder="例如：1-50、120、850-860、1081">
-        <button class="btn btn-primary" data-act="custom-start">开始训练</button>
-      </div>
-      <p class="desc" style="margin:10px 0 0">
-        支持单个题号和范围（如 <b>1-50</b>），用「、」「，」或空格分隔；题号即题库全局编号
-        （单选 1-849、多选 850-1080、判断 1081-1445），无效题号自动忽略。练习模式不限时，
-        交卷后写入学习记录。
-      </p>
-    </div>
-    <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
-    <div class="mini-grid" id="miniGrid"></div>
-    <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
-    <div class="kpis" id="homeKpis"></div>
-  </section>
-</template>
-
 <!-- ============ 首页 · 新版（A 单列主操作区 / B 左右双栏，共用外壳） ============ -->
 <template id="tpl-home2">
   <section class="view-enter">
@@ -91,27 +46,6 @@
     <div class="h2-note" id="h2Note"></div>
     <div class="h2-grid" id="h2Grid"></div>
   </section>
-</template>
-
-<template id="tpl-paper-card">
-  <article class="paper-card">
-    <h3><span class="dot"></span><span class="p-title"></span></h3>
-    <div class="meta p-meta">1445 题 · 满分 100</div>
-    <div class="stat">
-      <div><b class="p-score">—</b><span>最高分</span></div>
-      <div class="sep"></div>
-      <div><b class="p-done">0</b><span>已答</span></div>
-    </div>
-    <div class="ops">
-      <button class="btn btn-primary" data-act="card-exam">开始考试</button>
-      <button class="btn" data-act="card-practice">练习模式</button>
-      <button class="btn" data-act="card-mock" title="随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟">模拟考试</button>
-    </div>
-    <div class="card-links">
-      <button class="btn btn-sm btn-ghost p-modules" data-act="card-modules">按题型练习 →</button>
-      <button class="btn btn-sm btn-ghost p-resume hidden" data-act="card-resume">继续上次作答</button>
-    </div>
-  </article>
 </template>
 
 <template id="tpl-kpi">

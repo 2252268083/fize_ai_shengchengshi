@@ -63,55 +63,9 @@ a{color:var(--brand);text-decoration:none}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* ---------- home ---------- */
-.hero{
-  position:relative; overflow:hidden; border-radius:22px; padding:30px 30px 26px;
-  background:linear-gradient(120deg,#2b3fb8 0%,#3b5bdb 42%,#6d4bd8 100%);
-  color:#fff; box-shadow:0 18px 40px rgba(43,63,184,.28);
-}
-.hero:after{
-  content:""; position:absolute; right:-90px; top:-120px; width:320px; height:320px;
-  background:radial-gradient(circle,rgba(255,255,255,.22),transparent 62%); border-radius:50%;
-}
-.hero h1{margin:0 0 8px;font-size:26px;letter-spacing:.5px}
-.hero p{margin:0;color:rgba(255,255,255,.82);font-size:13.5px}
-.hero .hero-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
-.hero .chip{
-  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
-  padding:6px 12px; border-radius:999px; font-size:12.5px; backdrop-filter:blur(4px);
-}
-.hero .hero-actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
-.hero .btn-primary{background:#fff;color:#2b3fb8}
-.hero .btn-primary:hover{background:#eef1ff}
-.hero .btn-ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)}
-.hero .btn-ghost:hover{background:rgba(255,255,255,.22)}
-
 .section-title{display:flex;align-items:baseline;gap:10px;margin:30px 2px 14px}
 .section-title h2{margin:0;font-size:17px;letter-spacing:.3px}
 .section-title span{color:var(--ink-3);font-size:12.5px}
-
-.paper-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.paper-card{
-  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  padding:20px;box-shadow:var(--shadow);transition:.2s;display:flex;flex-direction:column;gap:14px;
-  position:relative;overflow:hidden;
-}
-.paper-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:#c7d2fe}
-.paper-card .ribbon{
-  position:absolute;top:14px;right:-32px;transform:rotate(38deg);
-  background:var(--ok);color:#fff;font-size:11px;padding:4px 38px;letter-spacing:1px;
-}
-.paper-card h3{margin:0;font-size:18px;display:flex;align-items:center;gap:8px}
-.paper-card h3 .dot{width:9px;height:9px;border-radius:50%;background:var(--brand)}
-.paper-card .meta{color:var(--ink-3);font-size:12.5px;margin-top:-8px}
-.paper-card .stat{
-  display:flex;align-items:center;gap:12px;background:#f8faff;border:1px dashed #dbe3ff;
-  padding:10px 12px;border-radius:12px;font-size:12.5px;color:var(--ink-2);
-}
-.paper-card .stat b{display:block;font-size:19px;color:var(--brand);font-weight:700;line-height:1.25}
-.paper-card .stat span{font-size:11.5px;color:var(--ink-3)}
-.paper-card .stat .sep{width:1px;height:26px;background:#dbe3ff}
-.paper-card .ops{display:flex;gap:8px;margin-top:auto}
-.paper-card .ops .btn{flex:1}
 
 .btn{
   border:1px solid var(--line); background:#fff; color:var(--ink);
@@ -128,7 +82,6 @@ a{color:var(--brand);text-decoration:none}
 .btn-sm{padding:6px 10px;font-size:12.5px;border-radius:9px}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 
-.mini-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .mini-card{
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;
   box-shadow:var(--shadow);display:flex;align-items:center;gap:14px;cursor:pointer;transition:.18s;
@@ -143,14 +96,13 @@ a{color:var(--brand);text-decoration:none}
 .mini-card h4{margin:0;font-size:14.5px}
 .mini-card p{margin:1px 0 0;color:var(--ink-3);font-size:12px}
 
-.notice{
+.modal-mask{
+  position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);z-index:60;
+  display:grid;place-items:center;padding:20px;animation:fade .18s;
+}
   display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;
   background:var(--warn-soft);border:1px solid #fde3bd;color:#8a5a10;font-size:12.8px;margin-top:16px;
 }
-.notice b{color:#7a4b06}
-.notice.ok{background:#eefaf3;border-color:#bbf7d0;color:#0f7a3d}
-.notice.ok b{color:#0b6b34}
-.notice .x{margin-left:auto;background:none;border:0;color:#b07b2d;font-size:16px;line-height:1}
 
 /* ---------- quiz ---------- */
 .quiz-shell{padding-top:6px}
@@ -357,7 +309,6 @@ select{
 
 .drawer-btn{display:none}
 @media (max-width:900px){
-  .paper-grid,.mini-grid{grid-template-columns:1fr}
   .quiz-body{grid-template-columns:minmax(0,1fr)}
   .side{
     position:fixed;right:0;top:0;bottom:0;width:300px;max-width:86vw;border-radius:0;z-index:50;
@@ -368,8 +319,6 @@ select{
   .q-card{padding:18px 16px}
   .q-stem{font-size:16px}
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .hero{padding:22px 18px}
-  .hero h1{font-size:21px}
   .result-hero{gap:18px}
   .score-ring{width:120px;height:120px}
   .score-ring .val b{font-size:30px}
@@ -596,51 +545,6 @@ select{
 <div class="toast" id="toast"></div>
 <div id="modalRoot"></div>
 
-<!-- ============ 首页 · 经典布局 ============ -->
-<template id="tpl-home">
-  <section class="view-enter">
-    <div class="layout-bar">
-      <button class="layout-switch" data-act="layout-cycle"></button>
-    </div>
-    <div class="hero">
-      <h1>理论题库 · 训练与考试</h1>
-      <p>2026年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库</p>
-      <div class="hero-chips">
-        <span class="chip">官方题库</span>
-        <span class="chip">共 1445 题</span>
-        <span class="chip">单选 849 · 多选 231 · 判断 365</span>
-        <span class="chip">含知识点与解析</span>
-      </div>
-      <div class="hero-actions">
-        <button class="btn btn-primary" data-act="random-exam">全库随机练习（1445 题）</button>
-        <button class="btn btn-ghost" data-act="open-wrong">错题重练</button>
-      </div>
-    </div>
-    <div class="notice ok" id="notice">
-      <span>✅</span>
-      <div><b>官方题库已收录：</b>单选 849 / 多选 231 / 判断 365，共 1445 题，答案提取自题库原文的【答案】标注（2026-10-27），部分题目附知识点与解析。如后续有官方更正，可在「答案管理」中粘贴覆盖。</div>
-    </div>
-    <div class="section-title"><h2>开始训练</h2><span>整套训练/考试做完全部题，也可按题型专项练</span></div>
-    <div class="paper-grid" id="paperGrid"></div>
-    <div class="section-title"><h2>自定义题库训练</h2><span>输入题号或范围，用「、」分隔，只练你想练的题</span></div>
-    <div class="panel custom-panel">
-      <div class="custom-row">
-        <input id="customNos" spellcheck="false" placeholder="例如：1-50、120、850-860、1081">
-        <button class="btn btn-primary" data-act="custom-start">开始训练</button>
-      </div>
-      <p class="desc" style="margin:10px 0 0">
-        支持单个题号和范围（如 <b>1-50</b>），用「、」「，」或空格分隔；题号即题库全局编号
-        （单选 1-849、多选 850-1080、判断 1081-1445），无效题号自动忽略。练习模式不限时，
-        交卷后写入学习记录。
-      </p>
-    </div>
-    <div class="section-title"><h2>专项练习</h2><span>跨卷混合 · 不占正式进度</span></div>
-    <div class="mini-grid" id="miniGrid"></div>
-    <div class="section-title"><h2>学习概况</h2><span>数据保存在本机浏览器 · <a href="javascript:;" data-act="open-history">查看学习记录 →</a></span></div>
-    <div class="kpis" id="homeKpis"></div>
-  </section>
-</template>
-
 <!-- ============ 首页 · 新版（A 单列主操作区 / B 左右双栏，共用外壳） ============ -->
 <template id="tpl-home2">
   <section class="view-enter">
@@ -657,27 +561,6 @@ select{
     <div class="h2-note" id="h2Note"></div>
     <div class="h2-grid" id="h2Grid"></div>
   </section>
-</template>
-
-<template id="tpl-paper-card">
-  <article class="paper-card">
-    <h3><span class="dot"></span><span class="p-title"></span></h3>
-    <div class="meta p-meta">1445 题 · 满分 100</div>
-    <div class="stat">
-      <div><b class="p-score">—</b><span>最高分</span></div>
-      <div class="sep"></div>
-      <div><b class="p-done">0</b><span>已答</span></div>
-    </div>
-    <div class="ops">
-      <button class="btn btn-primary" data-act="card-exam">开始考试</button>
-      <button class="btn" data-act="card-practice">练习模式</button>
-      <button class="btn" data-act="card-mock" title="随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟">模拟考试</button>
-    </div>
-    <div class="card-links">
-      <button class="btn btn-sm btn-ghost p-modules" data-act="card-modules">按题型练习 →</button>
-      <button class="btn btn-sm btn-ghost p-resume hidden" data-act="card-resume">继续上次作答</button>
-    </div>
-  </article>
 </template>
 
 <template id="tpl-kpi">
@@ -1204,17 +1087,16 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
   var tickTimer = null;
   var reviewH = null;
 
-  /* ---------------- 布局方案：classic（经典）/ a（主操作区）/ b（左右双栏） ---------------- */
-  var LAYOUTS = ['classic', 'a', 'b'];
-  var LAYOUT_NAME = { classic: '经典', a: '新版A', b: '新版B' };
+  /* ---------------- 布局方案：a（主操作区）/ b（左右双栏），经典版已移除 ---------------- */
+  var LAYOUTS = ['a', 'b'];
+  var LAYOUT_NAME = { a: 'A·主操作区', b: 'B·双栏' };
   var LAYOUT_DESC = {
-    classic: '经典布局：hero + 卷卡片网格',
-    a: '新版A：单卷满宽主操作区，主入口全部收进首屏',
-    b: '新版B：左侧主训练区 + 右侧工具栏，信息密度更高'
+    a: '布局A：单卷满宽主操作区，主入口全部收进首屏',
+    b: '布局B：左侧主训练区 + 右侧工具栏，信息密度更高'
   };
   function layout() {
     var v = db.settings && db.settings.layout;
-    return LAYOUTS.indexOf(v) >= 0 ? v : 'classic';
+    return LAYOUTS.indexOf(v) >= 0 ? v : 'a';
   }
   function applyLayoutAttr() {
     document.body.setAttribute('data-layout', layout());
@@ -1627,13 +1509,16 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
 
     var right = el('div', 'mc-right');
     var bExam = el('button', 'btn btn-primary', '开始考试');
+    bExam.setAttribute('data-act', 'card-exam');
     bExam.addEventListener('click', function () { startPaperAll(p, 'exam'); });
     right.appendChild(bExam);
     var bPrac = el('button', 'btn', '练习模式');
+    bPrac.setAttribute('data-act', 'card-practice');
     bPrac.addEventListener('click', function () { startPaperAll(p, 'practice'); });
     right.appendChild(bPrac);
     var bMock = el('button', 'btn', '模拟考试');
     bMock.title = '随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟';
+    bMock.setAttribute('data-act', 'card-mock');
     bMock.addEventListener('click', function () { startMockExam(); });
     right.appendChild(bMock);
 
@@ -1644,6 +1529,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     var foot = el('div', 'mc-foot');
     if (st.best !== null) foot.appendChild(el('span', 'mc-best', '最高分 ' + st.best));
     var rnd = el('button', 'btn btn-sm btn-ghost', '🎲 全库随机');
+    rnd.setAttribute('data-act', 'random-exam');
     rnd.addEventListener('click', function () { startRandomExam(); });
     foot.appendChild(rnd);
     if (st.recent) {
@@ -1654,6 +1540,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       foot.appendChild(r);
     }
     var mods = el('button', 'btn btn-sm btn-ghost', '按题型练习 →');
+    mods.setAttribute('data-act', 'card-modules');
     mods.addEventListener('click', function () { openPaper(p.id, pick.mode); });
     foot.appendChild(mods);
     card.appendChild(foot);
@@ -1674,6 +1561,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     inp.placeholder = '例如：1-50、120、850-860、1081';
     row.appendChild(inp);
     var btn = el('button', 'btn btn-primary', '开始训练');
+    btn.setAttribute('data-act', 'custom-start');
     btn.addEventListener('click', function () { startCustomSet(inp.value); });
     row.appendChild(btn);
     box.appendChild(row);
@@ -1702,75 +1590,7 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
 
   function viewHome() {
     applyLayoutAttr();
-    return layout() === 'classic' ? viewHomeClassic() : viewHome2();
-  }
-
-  /* ---------- 经典布局（保持原样） ---------- */
-  function viewHomeClassic() {
-    var node = cloneTpl('tpl-home');
-    var grid = $('#paperGrid', node);
-    var mini = $('#miniGrid', node);
-
-    PAPERS.forEach(function (p) {
-      var card = cloneTpl('tpl-paper-card');
-      var st = paperStats(p);
-      $('.p-title', card).textContent = p.title;
-      $('.p-meta', card).textContent = st.total + ' 题 · 满分 100';
-      $('.p-score', card).textContent = st.best === null ? '—' : String(st.best);
-      $('.p-done', card).textContent = String(st.done);
-
-      var resume = $('.p-resume', card);
-      if (st.recent) {
-        resume.classList.remove('hidden');
-        resume.textContent = '继续：' + modLabel(st.recentMod) + ' · ' + (st.recent.mode === 'practice' ? '练习' : '考试') +
-          ' · ' + (st.recent.random ? '随机' : '顺序') + ' · ' + moduleAnswered(p.id, st.recentMod) + '/' + (st.recent.total || 0);
-        resume.addEventListener('click', function () { beginSession(p.id, st.recentMod, st.recent.mode || 'exam', {}); });
-      }
-      $('.btn-primary', card).addEventListener('click', function () { startPaperAll(p, 'exam'); });
-      $('[data-act="card-practice"]', card).addEventListener('click', function () { startPaperAll(p, 'practice'); });
-      $('[data-act="card-mock"]', card).addEventListener('click', function () { startMockExam(); });
-      $('[data-act="card-modules"]', card).addEventListener('click', function () { openPaper(p.id, pick.mode); });
-      grid.appendChild(card);
-    });
-
-    mini.appendChild(makeMiniCard('🎲', '', '全库随机练习', '全库 ' + ALL.length + ' 题随机 · 不限时练完', function () {
-      startRandomExam();
-    }));
-    mini.appendChild(makeMiniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
-      route = 'wrong'; render();
-    }));
-    mini.appendChild(makeMiniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
-      route = 'fav'; render();
-    }));
-    mini.appendChild(makeMiniCard('🗂️', '', '学习记录', '已保存 ' + db.history.length + ' 次作答记录', function () {
-      route = 'history'; render();
-    }));
-    mini.appendChild(makeMiniCard('📊', 'ok', '正确率统计', '按题型/知识点看正确率', function () {
-      route = 'stats'; render();
-    }));
-
-    var heroBtn = $('[data-act="random-exam"]', node);
-    if (heroBtn) heroBtn.textContent = '全库随机练习（' + ALL.length + ' 题）';
-
-    var tr = buildTempResume();
-    if (tr) grid.parentNode.insertBefore(tr, grid.nextSibling);
-
-    var customBtn = $('[data-act="custom-start"]', node);
-    var customInput = $('#customNos', node);
-    customBtn.addEventListener('click', function () { startCustomSet(customInput.value); });
-    customInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); startCustomSet(customInput.value); }
-    });
-
-    var kpis = $('#homeKpis', node);
-    var tmpK = buildKpis();
-    while (tmpK.firstChild) kpis.appendChild(tmpK.firstChild);
-
-    $('[data-act="random-exam"]', node).addEventListener('click', function () { startRandomExam(); });
-    $('[data-act="open-wrong"]', node).addEventListener('click', function () { route = 'wrong'; render(); });
-    $('[data-act="open-history"]', node).addEventListener('click', function () { route = 'history'; render(); });
-    paintLayoutBtn(node);
-    return node;
+    return viewHome2();
   }
 
   /* ---------- 新版布局（A 单列 / B 双栏，共用 DOM，靠 CSS 分流） ---------- */
