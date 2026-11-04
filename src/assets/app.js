@@ -1043,6 +1043,20 @@
       return false;
     }
 
+    /* 练习模式做到最后一题：全部作答完毕则自动弹出交卷确认（单题组只提示），
+       不再停留在最后一页等用户自己找「交卷」。考试/模拟模式不受影响（有计时与确认流程）。 */
+    function maybeAutoSubmit() {
+      if (!sess || sess.mode !== 'practice' || sess.done) return;
+      if (sess.idx !== sess.qs.length - 1) return;
+      var unanswered = sess.qs.filter(function (q) { return !sess.answers[q.key]; }).length;
+      if (!unanswered) {
+        if (sess.qs.length > 1) confirmSubmit();
+        else toast('已答完，点「交卷」查看成绩');
+      } else {
+        toast('已是最后一题，还有 ' + unanswered + ' 题未作答，可点「交卷」结束（未答按错处理）');
+      }
+    }
+
     function choose(i) {
       var q = cur();
       var L = letterAt(i);
@@ -1066,6 +1080,7 @@
           removeWrong(q);
           if (autoNext()) return; // 答对自动下一题
         } else if (c) { addWrong(q); }
+        maybeAutoSubmit();  // 最后一题答完自动引导交卷
       }
       paintOptions();
       paintCard();
@@ -1183,6 +1198,7 @@
         if (autoNext()) return; // 多选确认后答对自动下一题
       } else if (c) { addWrong(q); }
       paintOptions(); paintCard(); paintFeedback();
+      maybeAutoSubmit();  // 最后一题答完自动引导交卷
     });
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
       $('#sideCard', node).classList.toggle('open');
@@ -1501,7 +1517,7 @@
           (nSrc ? '，其中 ' + nSrc + ' 道来自其他设备的备份' : '') +
           '。答对后会自动移出；也可手动移除。每次交卷的错题可在上方「练习回顾」按次查看。';
       } else {
-        desc.textContent = '共 ' + allQs().length + ' 道。收藏的题目可以随时回看。';
+        desc.textContent = '共 ' + allQs().length + ' 道。点上方「开始练习」进入收藏答题区，按练习模式作答（答对答错即时反馈）。';
       }
       var qs = visibleQs();
       if (!qs.length) {
@@ -1612,10 +1628,13 @@
       $('.panel', node).insertBefore(srcSel, filterRow);
     }
 
-    $('[data-act="list-practice"]', node).addEventListener('click', function () {
+    var bStart = $('[data-act="list-practice"]', node);
+    bStart.textContent = kind === 'wrong' ? '开始重练' : '⭐ 开始练习（收藏答题区）';
+    bStart.addEventListener('click', function () {
       var qs = visibleQs();
       if (!qs.length) { toast('列表是空的'); return; }
-      beginSet(qs, title + ' · 重练', 'practice');
+      /* 收藏题目进入专属答题区：练习模式、按当前筛选列表作答 */
+      beginSet(qs, kind === 'wrong' ? title + ' · 重练' : title + ' · 练习', 'practice');
     });
     /* 打印 / 导出 Word（按当前筛选的列表） */
     var bPrint = el('button', 'btn', '🖨 打印');
