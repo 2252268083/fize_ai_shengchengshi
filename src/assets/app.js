@@ -1206,28 +1206,35 @@
     /* ---------- 逐题笔记（写、改、自动保存） ---------- */
     var noteTimer = null;
     var noteKey = null;    /* 当前笔记框绑定的题 key，防止慢一拍的保存写串题 */
+    var noteRevealed = {}; /* v3.10.3 点过「查看笔记」的题（未作答也看），本会话内保持可见 */
 
     function noteTime(t) {
       var d = new Date(t || Date.now());
       return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
     }
 
-    /* open：true 强制打开编辑框；false/省略 按「有无笔记」决定是否展示正文 */
+    /* open：true 强制打开编辑框；false/省略 按「有无笔记 + 是否已作答」决定展示 */
     function paintNote(open) {
       var q = cur(), n = noteOf(q);
       var box = $('#qNote', node), view = $('#noteView', node), ta = $('#noteText', node);
       var badge = $('#noteBadge', node), btn = $('#btnNoteToggle', node);
+      var viewBtn = $('#btnNoteView', node);
       if (!box) return;
       /* 同一题重复重绘（如答错后回到原题）时保留正在编辑的内容，不要把用户刚打的字冲掉 */
       var sameEdit = (noteKey === q.key) && box.classList.contains('editing');
       noteKey = q.key;
-      view.textContent = n ? n.t : '';
-      view.classList.toggle('hidden', !n);
+      /* v3.10.3 防剧透：本题还没作答时，笔记正文不直接亮出来（答题时一眼看到笔记就没得思考了）；
+         要看要点下方「查看笔记」主动点开。已作答的题维持自动展示。 */
+      var answered = !!sess.answers[q.key];
+      var reveal = answered || noteRevealed[q.key] || sameEdit || !!open;
       var oc = Object.keys(optNotesOf(q)).length;   /* 选项备注条数 */
+      view.textContent = (n && reveal) ? n.t : '';
+      view.classList.toggle('hidden', !n || !reveal);
       box.classList.toggle('has-note', !!n || oc > 0);
       badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at) + (oc ? ' · 选项备注 ' + oc + ' 条' : ''))
         : (oc ? ('选项备注 ' + oc + ' 条') : '');
       btn.textContent = n ? '编辑' : '写笔记';
+      if (viewBtn) viewBtn.classList.toggle('hidden', !(n || oc) || reveal);
       if (!sameEdit) ta.value = n ? n.t : '';
       box.classList.toggle('editing', sameEdit ? true : !!open);
     }
@@ -1260,6 +1267,10 @@
     }
     function paintOptNotes() {
       var q = cur(), dict = optNotesOf(q);
+      /* v3.10.3 防剧透：还没作答时，选项备注的只读蓝条不渲染；
+         点「查看笔记」主动看过（noteRevealed）后整题笔记 + 选项备注一起可见，
+         手机端没有 ✎，靠这个入口也能看到已写的选项备注。 */
+      var answered = !!sess.answers[q.key] || !!noteRevealed[q.key];
       $all('.opt-note-add', opts).forEach(function (b) {
         b.classList.toggle('on', optEditing === b.getAttribute('data-letter'));
       });
@@ -1268,7 +1279,7 @@
         var txt = dict[L] || '';
         var editing = optEditing === L;
         w.innerHTML = '';
-        w.classList.toggle('show', !!txt || editing);
+        w.classList.toggle('show', (!!txt && answered) || editing);
         w.classList.toggle('editing', editing);
         if (editing) {
           var ta = document.createElement('textarea');
@@ -1305,7 +1316,7 @@
           bar.appendChild(del); bar.appendChild(done);
           w.appendChild(bar);
           setTimeout(function () { try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {} }, 0);
-        } else if (txt) {
+        } else if (txt && answered) {
           var v = el('div', 'opt-note');
           v.textContent = txt;   /* textContent：笔记内容按纯文本渲染 */
           w.appendChild(v);
@@ -1338,7 +1349,11 @@
       var box = $('#qNote', node);
       if (box) box.classList.toggle('has-note', !!n || oc > 0);
       var view = $('#noteView', node);
-      if (view) { view.textContent = n ? n.t : ''; view.classList.toggle('hidden', !n); }
+      if (view) {
+        var rv = !!sess.answers[q.key] || noteRevealed[q.key] || box.classList.contains('editing');
+        view.textContent = (n && rv) ? n.t : '';
+        view.classList.toggle('hidden', !n || !rv);
+      }
       return had !== keep;
     }
 
@@ -1408,6 +1423,7 @@
         }
         paintOptions();
         paintCard();
+        if (sess.mode === 'exam') { paintNote(false); paintOptNotes(); }  /* exam 作答后笔记切到可见 */
         return;
       }
       if (sess.mode === 'practice' && sess.answers[q.key]) {
@@ -1430,6 +1446,8 @@
       paintOptions();
       paintCard();
       paintFeedback();
+      paintNote(false);   /* 已作答：笔记从「点了才看」切到自动展示（答对已 autoNext 的不经过这里） */
+      paintOptNotes();    /* 选项备注蓝条同样在作答后才亮出 */
     }
 
     function setAnswer(q, v) {
@@ -1548,7 +1566,9 @@
       delete sess.answers[q.key];
       if (sess.pending) delete sess.pending[q.key];
       if (sess.persist) save();
+      delete noteRevealed[q.key];   /* 清空本题＝回到未作答：笔记重新藏起来，防剧透 */
       paintOptions(); paintCard(); paintFeedback();
+      paintNote(false); paintOptNotes();
     });
     $('[data-act="fav"]', node).addEventListener('click', function () {
       var q = cur();
@@ -1563,6 +1583,12 @@
     var noteBox = $('#qNote', node);
     if (noteBox) {
       var ta = $('#noteText', node);
+      var vb = $('#btnNoteView', node);
+      if (vb) vb.addEventListener('click', function () {
+        noteRevealed[cur().key] = true;   /* 用户主动看：本题本会话内不再隐藏 */
+        paintNote(false);
+        paintOptNotes();                  /* 选项备注蓝条一起亮出（手机端靠这个入口看备注） */
+      });
       $('#btnNoteToggle', node).addEventListener('click', function () {
         var willOpen = !noteBox.classList.contains('editing');
         if (!willOpen) noteFlush();          /* 收起＝保存 */
@@ -1625,6 +1651,7 @@
         if (autoNext()) return; // 多选确认后答对自动下一题
       } else if (c) { addWrong(q); noteOnWrong(q); }
       paintOptions(); paintCard(); paintFeedback();
+      paintNote(false); paintOptNotes();   /* 已作答：笔记切到可见 */
       maybeAutoSubmit();  // 最后一题答完自动引导交卷
     });
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
