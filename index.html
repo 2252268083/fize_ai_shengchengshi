@@ -115,6 +115,23 @@ a{color:var(--brand);text-decoration:none}
 .jump-bar .jump-input{display:flex;gap:6px;margin-left:auto}
 .jump-bar .jump-input input{width:92px;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
 .jump-bar .jump-input input:focus{border-color:var(--brand)}
+/* 关键词搜题：输入框 + 结果下拉 */
+.jump-bar .jump-search{position:relative;flex:1;min-width:170px;max-width:320px}
+.jump-bar .jump-search input{width:100%;box-sizing:border-box;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
+.jump-bar .jump-search input:focus{border-color:var(--brand)}
+.search-drop{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:40;background:#fff;border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(15,23,42,.16);max-height:300px;overflow:auto;padding:4px}
+.search-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:8px;font:inherit;cursor:pointer}
+.search-row:hover{background:var(--brand-soft)}
+.search-row b{color:var(--brand);flex:none}
+.search-row .st{flex:none;font-size:11px;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:0 6px}
+.search-row .sq{font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-empty,.search-more{padding:8px 10px;font-size:12.5px;color:var(--ink-2)}
+/* 统计页最近 7 天趋势 */
+.trend-chart{display:flex;align-items:stretch;gap:10px;height:132px;padding:6px 2px 0}
+.trend-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
+.trend-bar{display:block;width:62%;max-width:34px;border-radius:5px 5px 0 0}
+.trend-val{font-size:11px;font-weight:700;color:var(--ink);line-height:1}
+.trend-lb{font-size:11px;color:var(--ink-2);white-space:nowrap}
 .custom-panel{padding:16px 18px}
 .custom-row{display:flex;gap:10px;flex-wrap:wrap}
 .custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
@@ -706,6 +723,10 @@ select{
       <div class="jump-input">
         <input id="jumpNo" type="text" inputmode="numeric" placeholder="题号 #850" spellcheck="false">
         <button class="btn btn-sm" data-act="jump-no">跳转</button>
+      </div>
+      <div class="jump-search" id="jumpSearch">
+        <input id="searchKw" type="text" placeholder="搜关键词，如：过拟合" spellcheck="false">
+        <div class="search-drop hidden" id="searchDrop"></div>
       </div>
       <div class="timer" id="timer"><span>⏱</span><span id="timerText">90:00</span></div>
     </div>
@@ -2617,6 +2638,75 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     $('#jumpNo', node).addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); $('[data-act="jump-no"]', node).click(); }
     });
+    /* ---------- 关键词搜题：匹配题干/选项/知识点/解析，点结果直达该题 ---------- */
+    var searchBox = $('#searchKw', node), drop = $('#searchDrop', node);
+    var searchTimer = null, searchKw0 = '', searchHits = [];
+    function runSearch() {
+      var kw = searchBox.value.trim().toLowerCase();
+      searchKw0 = kw;
+      searchHits = [];
+      if (kw.length < 2) { drop.classList.add('hidden'); drop.innerHTML = ''; return; }
+      var all = PAPERS[0].questions;   /* 单题库：官方题库全量搜索 */
+      for (var i = 0; i < all.length; i++) {
+        var q = all[i];
+        var hay = (q.q + ' ' + q.o.join(' ') + ' ' + (q.kp || '') + ' ' + (q.an || '')).toLowerCase();
+        if (hay.indexOf(kw) >= 0) { searchHits.push(q); if (searchHits.length >= 60) break; }
+      }
+      drop.innerHTML = '';
+      if (!searchHits.length) {
+        drop.appendChild(el('div', 'search-empty', '没有匹配「' + searchBox.value.trim() + '」的题目'));
+      } else {
+        searchHits.slice(0, 8).forEach(function (q) {
+          var r = el('button', 'search-row');
+          r.type = 'button';
+          var stem = q.q.replace(/\s+/g, ' ');
+          r.innerHTML = '<b>#' + q.n + '</b><span class="st">' + typeName(q.t) + '</span>' +
+            '<span class="sq">' + escHtml(stem.slice(0, 46)) + (stem.length > 46 ? '…' : '') + '</span>';
+          r.addEventListener('click', function () { gotoHit(q); });
+          drop.appendChild(r);
+        });
+        if (searchHits.length > 8) {
+          drop.appendChild(el('div', 'search-more', '共 ' + searchHits.length + ' 条匹配，显示前 8 条；回车直达第一条'));
+        }
+      }
+      drop.classList.remove('hidden');
+    }
+    function gotoHit(q) {
+      drop.classList.add('hidden');
+      var i = sess.qs.findIndex(function (x) { return x.key === q.key; });
+      if (i >= 0) {   /* 在当前练习里：直接跳过去 */
+        sess.idx = i; persistPos(); rebuildQuestion();
+        searchBox.value = '';
+        return;
+      }
+      /* 不在当前练习：把全部匹配题组成一个搜索练习，直接落在该题上（断点可续） */
+      var qs = searchHits.slice().sort(function (a, b) { return a.n - b.n; });
+      var at = qs.findIndex(function (x) { return x.key === q.key; });
+      showModal('本题不在本次练习中',
+        '第 ' + q.n + ' 题（' + typeName(q.t) + '）不在当前练习范围。可以把「' + escHtml(searchKw0) + '」匹配到的 <b>' +
+        qs.length + '</b> 道题组成一个搜索练习，直接从第 ' + q.n + ' 题开始做（练习模式，进度自动保存）。',
+        '直达该题', function () {
+          sess = {
+            pid: null, mod: null, title: '搜索：' + searchKw0, mode: 'practice', qs: qs,
+            answers: {}, flags: {}, idx: Math.max(0, at), st: null, ms: null,
+            persist: true, tempKey: 'search', startAt: Date.now(), pending: {},
+            deadline: 0, limit: 0, done: false, random: false
+          };
+          route = 'quiz'; render();
+        }, '取消');
+      searchBox.value = '';
+    }
+    searchBox.addEventListener('input', function () {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(runSearch, 220);   /* 输入停顿 220ms 再搜，避免每键全库扫 */
+    });
+    searchBox.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); if (searchHits.length) gotoHit(searchHits[0]); }
+      else if (e.key === 'Escape') { drop.classList.add('hidden'); }
+    });
+    node.addEventListener('click', function (e) {   /* 点搜索框/下拉以外处收起结果 */
+      if (!drop.contains(e.target) && e.target !== searchBox) drop.classList.add('hidden');
+    });
     $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
     $('[data-act="exit"]', node).addEventListener('click', function () {
       var answered = Object.keys(sess.answers).length;
@@ -3387,6 +3477,62 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       '%</b>；涉及 <b>' + d.wrongCount + '</b> 道答错过的题（可在错题本重练）。';
 
     var box = $('#statsBody', node);
+
+    /* ---- 最近 7 天：按天汇总学习记录里的作答量与正确率，柱形小图 ---- */
+    var days = [];
+    var day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    for (var di = 6; di >= 0; di--) {
+      var s0 = day0.getTime() - di * 86400000;
+      var dd = new Date(s0);
+      days.push({
+        start: s0, end: s0 + 86400000,
+        label: di === 0 ? '今天' : (pad2(dd.getMonth() + 1) + '-' + pad2(dd.getDate())),
+        n: 0, ok: 0
+      });
+    }
+    var latestAt = 0;
+    db.history.forEach(function (h) {
+      if (!h.snap || !h.at) return;
+      if (h.at > latestAt) latestAt = h.at;
+      for (var j = 0; j < 7; j++) {
+        if (h.at >= days[j].start && h.at < days[j].end) {
+          var keys = Object.keys(h.snap);
+          days[j].n += keys.length;
+          keys.forEach(function (k) {
+            var q = QMAP[k];
+            if (q && h.snap[k] === correctOf(q)) days[j].ok++;
+          });
+          break;
+        }
+      }
+    });
+    box.appendChild(el('h3', null, '最近 7 天'));
+    var weekN = days.reduce(function (a, d) { return a + d.n; }, 0);
+    var weekOk = days.reduce(function (a, d) { return a + d.ok; }, 0);
+    var maxN = Math.max.apply(null, days.map(function (d) { return d.n; }).concat([1]));
+    var chart = '<div class="trend-chart">' + days.map(function (d) {
+      var pct = d.n ? Math.round(d.ok / d.n * 100) : null;
+      var color = pct == null ? 'var(--line)' : (pct >= 80 ? 'var(--ok)' : pct >= 60 ? '#d97706' : 'var(--bad)');
+      var h = d.n ? Math.max(6, Math.round(d.n / maxN * 88)) : 0;
+      return '<div class="trend-col" title="' + d.label + ' 作答 ' + d.n + ' 题' +
+        (pct == null ? '' : '，正确率 ' + pct + '%') + '">' +
+        '<span class="trend-val">' + (d.n || '') + '</span>' +
+        '<i class="trend-bar" style="height:' + h + '%;background:' + (d.n ? color : 'var(--line)') + '"></i>' +
+        '<span class="trend-lb">' + d.label + '</span></div>';
+    }).join('') + '</div>';
+    var trendWrap = el('div', 'stat-block');
+    trendWrap.innerHTML = chart;
+    box.appendChild(trendWrap);
+    var trendSum = el('p', 'desc');
+    trendSum.innerHTML = weekN
+      ? '最近 7 天共作答 <b>' + weekN + '</b> 题，答对 <b>' + weekOk + '</b> 题，平均正确率 <b>' +
+        Math.round(weekOk / weekN * 100) + '%</b>' +
+        (latestAt ? '；最近一次作答：' + (function (d) {
+          return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+        })(new Date(latestAt)) : '') + '。'
+      : '最近 7 天还没有作答记录，去练一组就会出现在这里。';
+    box.appendChild(trendSum);
+
     box.appendChild(el('h3', null, '按题型'));
     var wrap = el('div', 'stat-block');
     wrap.innerHTML = [['single', '单选题'], ['multi', '多选题'], ['judge', '判断题']].map(function (x) {
@@ -3524,9 +3670,41 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
           var d = pack.db || {};
           if (!d.papers || !d.history) { toast('这不是有效的进度备份文件'); return; }
           var srcName = pack.deviceName || '备份文件';
+          /* 恢复前先给用户看清这份备份是谁、什么时候导的、里面有什么，防止拿旧备份覆盖新进度 */
+          function relWhen(t) {
+            var d = new Date(t);
+            var base = pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+            var diff = Date.now() - t;
+            if (diff < 0) return base;
+            if (diff < 3600e3) return Math.max(1, Math.round(diff / 60e3)) + ' 分钟前（' + base + '）';
+            if (diff < 86400e3) return Math.round(diff / 3600e3) + ' 小时前（' + base + '）';
+            return Math.round(diff / 86400e3) + ' 天前（' + base + '）';
+          }
+          var whenTxt = pack.exportedAt ? relWhen(pack.exportedAt) : '未知（旧版备份未带导出时间）';
+          var wN = Object.keys(d.wrong || {}).length;
+          var fN = Object.keys(d.fav || {}).length;
+          var nN = Object.keys(d.notes || {}).filter(function (k) {
+            var e = d.notes[k]; return e && (e.t || (e.o && Object.keys(e.o).length));
+          }).length;
+          var hasUndoneBk = !!((d.temp && Object.keys(d.temp.answers || {}).length) ||
+            Object.keys(d.papers || {}).some(function (pid) {
+              var p = d.papers[pid];
+              return p && p.sessions && Object.keys(p.sessions).some(function (m) {
+                var ms = p.sessions[m];
+                return ms && !ms.done && ms.order && Object.keys(ms.answers || {}).length;
+              });
+            }));
+          var localNew = 0;
+          db.history.forEach(function (h) { if (h.at > localNew) localNew = h.at; });
+          var staleWarn = (pack.exportedAt && localNew > pack.exportedAt)
+            ? '<b style="color:#c0392b">注意：本机已有比这份备份更新的作答记录（最近一次 ' + relWhen(localNew) +
+              '），恢复会把这些更新内容覆盖掉。</b><br>' : '';
           showModal('恢复备份？',
-            '来自「' + srcName + '」的备份。作答进度、收藏、历史记录、答案修改将覆盖为备份内容；' +
-            '错题本为<b>合并</b>：备份里的错题逐道加入（标记为来自「' + srcName + '」的备份错题），当前已有错题全部保留、不覆盖。' +
+            '来自「<b>' + escHtml(srcName) + '</b>」的备份，导出于 ' + escHtml(whenTxt) + '。<br>' +
+            '内容：学习记录 ' + (d.history || []).length + ' 条、错题 ' + wN + ' 道、收藏 ' + fN +
+            ' 题、笔记 ' + nN + ' 条' + (hasUndoneBk ? '、含未交卷进度' : '') + '。<br>' + staleWarn +
+            '作答进度、收藏、历史记录、答案修改将覆盖为备份内容；' +
+            '错题本为<b>合并</b>：备份里的错题逐道加入（标记为来自「' + escHtml(srcName) + '」的备份错题），当前已有错题全部保留、不覆盖。' +
             '笔记同样<b>合并</b>：同一题以备份里的笔记为准，本机其他笔记保留。',
             '合并恢复', function () {
               var curName = deviceName();

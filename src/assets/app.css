@@ -104,6 +104,23 @@ a{color:var(--brand);text-decoration:none}
 .jump-bar .jump-input{display:flex;gap:6px;margin-left:auto}
 .jump-bar .jump-input input{width:92px;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
 .jump-bar .jump-input input:focus{border-color:var(--brand)}
+/* 关键词搜题：输入框 + 结果下拉 */
+.jump-bar .jump-search{position:relative;flex:1;min-width:170px;max-width:320px}
+.jump-bar .jump-search input{width:100%;box-sizing:border-box;padding:6px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;outline:none;background:#fff}
+.jump-bar .jump-search input:focus{border-color:var(--brand)}
+.search-drop{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:40;background:#fff;border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(15,23,42,.16);max-height:300px;overflow:auto;padding:4px}
+.search-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:8px;font:inherit;cursor:pointer}
+.search-row:hover{background:var(--brand-soft)}
+.search-row b{color:var(--brand);flex:none}
+.search-row .st{flex:none;font-size:11px;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:0 6px}
+.search-row .sq{font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-empty,.search-more{padding:8px 10px;font-size:12.5px;color:var(--ink-2)}
+/* 统计页最近 7 天趋势 */
+.trend-chart{display:flex;align-items:stretch;gap:10px;height:132px;padding:6px 2px 0}
+.trend-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
+.trend-bar{display:block;width:62%;max-width:34px;border-radius:5px 5px 0 0}
+.trend-val{font-size:11px;font-weight:700;color:var(--ink);line-height:1}
+.trend-lb{font-size:11px;color:var(--ink-2);white-space:nowrap}
 .custom-panel{padding:16px 18px}
 .custom-row{display:flex;gap:10px;flex-wrap:wrap}
 .custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
