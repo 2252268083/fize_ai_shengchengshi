@@ -252,6 +252,9 @@
   var route = 'home';
   var pick = { pid: null, mode: 'exam' };
   var sess = null;
+  /* v3.11.1 交卷弹窗跳转回调：viewQuiz 渲染时注册（rebuildQuestion 是它内部函数，
+     confirmSubmit 在外层拿不到，只能走这个模块级引用；离开答题页时置空防悬挂） */
+  var quizJump = null;
   var lastResult = null;
   var revOnlyWrong = true;   /* v3.5：默认只回顾错题，正确题按需展开（1445 题全量渲染会卡） */
   var revShown = 60;
@@ -1153,6 +1156,35 @@
       pbars.appendChild(row);
     });
 
+    /* ---------- 答题卡：题号格子，点格跳题 ---------- */
+    /* 练习模式：答对绿 / 答错红 / 未答白；考试模式交卷前不判分，已答一律蓝（防剧透）。
+       标记题琥珀色描边，当前题蓝色描边。 */
+    var sheetGrid = $('#sheetGrid', node);
+    var sheetChips = [];
+    sess.qs.forEach(function (q, i) {
+      var chip = el('button', 'sheet-chip', String(q.n));
+      chip.type = 'button';
+      chip.title = '#' + q.n + ' ' + typeName(q.t);
+      chip.addEventListener('click', function () {
+        if (sess.idx === i) return;
+        sess.idx = i;
+        persistPos();
+        rebuildQuestion();
+        window.scrollTo(0, 0);
+        /* 手机端答题卡是抽屉，跳完就收起露出题目 */
+        $('#sideCard', node).classList.remove('open');
+      });
+      sheetGrid.appendChild(chip);
+      sheetChips.push(chip);
+    });
+    if (sess.mode !== 'practice') {
+      /* 考试模式交卷前看不到对错：图例里去掉「对/错」两项 */
+      var lgOk = sheetGrid.parentNode.querySelector('.lg-ok');
+      var lgBad = sheetGrid.parentNode.querySelector('.lg-bad');
+      if (lgOk) lgOk.parentNode.removeChild(lgOk);
+      if (lgBad) lgBad.parentNode.removeChild(lgBad);
+    }
+
     function rebuildQuestion() {
       noteFlush();       /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
       optNoteFlush();    /* 选项备注同理 */
@@ -1544,6 +1576,25 @@
       $('#infoFlag', node).textContent = String(flag);
       $('#infoLeft', node).textContent = String(sess.qs.length - done);
       $('#cardProgress', node).textContent = done + '/' + sess.qs.length;
+      paintSheet();
+    }
+
+    function paintSheet() {
+      var practice = sess.mode === 'practice';
+      for (var i = 0; i < sess.qs.length; i++) {
+        var q = sess.qs[i];
+        var a = sess.answers[q.key];
+        var cls = 'sheet-chip';
+        if (a) {
+          var c = practice ? correctOf(q) : null;
+          if (practice && c && a === c) cls += ' ok';
+          else if (practice && c) cls += ' bad';
+          else cls += ' done';   /* 考试模式已答 / 练习模式未收录答案 */
+        }
+        if (sess.flags[q.key]) cls += ' flagged';
+        if (i === sess.idx) cls += ' cur';
+        sheetChips[i].className = cls;
+      }
     }
 
     // footer buttons
@@ -1751,6 +1802,13 @@
     node.addEventListener('click', function (e) {   /* 点搜索框/下拉以外处收起结果 */
       if (!drop.contains(e.target) && e.target !== searchBox) drop.classList.add('hidden');
     });
+    /* v3.11.1 交卷弹窗的未答题跳转：注册本视图的跳转实现（离开时在 exit 里置空） */
+    quizJump = function (i) {
+      sess.idx = i;
+      persistPos();
+      rebuildQuestion();
+      window.scrollTo(0, 0);
+    };
     $('[data-act="submit"]', node).addEventListener('click', function () { confirmSubmit(); });
     $('[data-act="exit"]', node).addEventListener('click', function () {
       var answered = Object.keys(sess.answers).length;
@@ -1758,6 +1816,7 @@
       function leave() {
         persistPos();
         sess = null;
+        quizJump = null;   /* v3.11.1 离开答题页，跳转回调作废 */
         if (pid) { pick.pid = pid; pick.mode = mode; route = 'paper'; }
         else route = 'home';
         render();
@@ -1772,11 +1831,33 @@
   }
 
   function confirmSubmit() {
-    var unanswered = sess.qs.filter(function (q) { return !sess.answers[q.key]; }).length;
-    var msg = '共 ' + sess.qs.length + ' 题，已答 ' + (sess.qs.length - unanswered) + ' 题';
-    if (unanswered) msg += '，还有 ' + unanswered + ' 题未作答（按错处理）';
+    /* v3.11.1 未答题跳转：交卷确认弹窗里列出所有没答的题号，点一下直接跳到那题继续作答 */
+    var un = [];
+    sess.qs.forEach(function (q, i) { if (!sess.answers[q.key]) un.push(i); });
+    var msg = '共 ' + sess.qs.length + ' 题，已答 ' + (sess.qs.length - un.length) + ' 题';
+    if (un.length) msg += '，还有 ' + un.length + ' 题未作答（按错处理），点下方题号可跳过去作答';
     msg += '。交卷后即可查看答案与解析。';
     showModal('确认交卷？', msg, '交卷', function () { evaluateAndFinish(false); });
+    if (!un.length) return;
+    var m = document.querySelector('#modalRoot .modal-mask:last-child .modal');
+    if (!m) return;
+    var wrap = el('div', 'un-jump');
+    var CAP = 60;  /* 芯片数量上限：再多弹窗塞不下，剩下的下一轮交卷继续跳 */
+    un.slice(0, CAP).forEach(function (i) {
+      var chip = el('button', 'un-chip', String(i + 1));
+      chip.title = '第 ' + (i + 1) + ' 题（未作答），点击跳转';
+      chip.addEventListener('click', function () {
+        /* 点题号 = 不交卷了，关掉弹窗回到该题 */
+        var mask = chip.closest('.modal-mask');
+        if (mask && mask.parentNode) mask.parentNode.removeChild(mask);
+        if (quizJump) quizJump(i);
+      });
+      wrap.appendChild(chip);
+    });
+    if (un.length > CAP) {
+      wrap.appendChild(el('div', 'un-more', '…其余 ' + (un.length - CAP) + ' 题未答，先作答上面的题，再次交卷时可继续跳转'));
+    }
+    m.insertBefore(wrap, m.querySelector('.acts'));
   }
 
   function evaluateAndFinish(auto) {
