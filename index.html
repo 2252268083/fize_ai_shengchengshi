@@ -815,7 +815,7 @@ select{
           <button class="btn btn-sm" data-act="confirm-multi" id="btnConfirmMulti">确认作答</button>
           <button class="btn btn-sm" data-act="mark" id="btnMark">标记</button>
           <button class="btn btn-sm" data-act="clear" id="btnClear">清空本题</button>
-          <span class="hint kbd-hint">键盘：1–4 / A–D 选择 · ← → 切题 · 练习答对自动下一题 · 答错后点绿色正确答案＝收藏本题</span>
+          <span class="hint kbd-hint">键盘：1–9 / A–H 选择 · 多选按同一数字＝取消该勾选 · 回车＝确认作答/交卷 · ← → 切题</span>
           <span class="spacer"></span>
           <button class="btn btn-sm" data-act="prev">上一题</button>
           <button class="btn btn-primary btn-sm" data-act="next">下一题</button>
@@ -3939,14 +3939,15 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
     /* 弹窗（交卷确认、三选弹窗等）打开时不响应选项快捷键 */
     if ($('.modal-mask')) return;
     var k = String(e.key || '').toUpperCase();
-    if (k.length === 1 && '1234'.indexOf(k) >= 0) {
-      var q0 = cur();
-      var i0 = '1234'.indexOf(k);
-      if (i0 < q0.o.length) {
-        e.preventDefault();
-        var bts = $all('#qOpts .opt');
-        if (bts[i0]) bts[i0].click();
-      }
+    /* v3.11.3 数字键 1–9 选选项：多选题按同一个数字＝取消勾选该选项（走 choose 的 pending 切换），
+       按到不存在的选项序号直接忽略——不 preventDefault、不弹提示，等于没按 */
+    if (k.length === 1 && k >= '1' && k <= '9') {
+      var qi = k.charCodeAt(0) - 49;
+      var qd = cur();
+      if (qi >= qd.o.length) return;   /* 没有这个选项：无反应 */
+      e.preventDefault();
+      var dbts = $all('#qOpts .opt');
+      if (dbts[qi]) dbts[qi].click();
     } else if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
       var q = cur();
       var i = 'ABCDEFGH'.indexOf(k);
@@ -3965,7 +3966,10 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       if (pb) pb.click();
     } else if (e.key === 'Enter') {
       if ($('.modal-mask')) return;
+      /* 多选题勾完按回车＝「确认作答」；其余情况回车仍是交卷确认 */
+      var cm = $('[data-act="confirm-multi"]');
       e.preventDefault();
+      if (cm && !cm.classList.contains('hidden')) { cm.click(); return; }
       confirmSubmit();
     }
   });

@@ -152,7 +152,7 @@
           <button class="btn btn-sm" data-act="confirm-multi" id="btnConfirmMulti">确认作答</button>
           <button class="btn btn-sm" data-act="mark" id="btnMark">标记</button>
           <button class="btn btn-sm" data-act="clear" id="btnClear">清空本题</button>
-          <span class="hint kbd-hint">键盘：1–4 / A–D 选择 · ← → 切题 · 练习答对自动下一题 · 答错后点绿色正确答案＝收藏本题</span>
+          <span class="hint kbd-hint">键盘：1–9 / A–H 选择 · 多选按同一数字＝取消该勾选 · 回车＝确认作答/交卷 · ← → 切题</span>
           <span class="spacer"></span>
           <button class="btn btn-sm" data-act="prev">上一题</button>
           <button class="btn btn-primary btn-sm" data-act="next">下一题</button>
@@ -166,6 +166,10 @@
           <div><b id="infoFlag">0</b>标记</div>
           <div><b id="infoLeft">100</b>未答</div>
         </div>
+        <div class="sheet-legend" id="sheetLegend">
+          <span class="lg lg-ok">对</span><span class="lg lg-bad">错</span><span class="lg lg-done">已答</span><span class="lg">未答</span><span class="lg lg-flag">标记</span>
+        </div>
+        <div class="sheet-grid" id="sheetGrid"></div>
       </aside>
     </div>
   </section>

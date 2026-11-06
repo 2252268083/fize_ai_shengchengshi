@@ -2931,14 +2931,15 @@
     /* 弹窗（交卷确认、三选弹窗等）打开时不响应选项快捷键 */
     if ($('.modal-mask')) return;
     var k = String(e.key || '').toUpperCase();
-    if (k.length === 1 && '1234'.indexOf(k) >= 0) {
-      var q0 = cur();
-      var i0 = '1234'.indexOf(k);
-      if (i0 < q0.o.length) {
-        e.preventDefault();
-        var bts = $all('#qOpts .opt');
-        if (bts[i0]) bts[i0].click();
-      }
+    /* v3.11.3 数字键 1–9 选选项：多选题按同一个数字＝取消勾选该选项（走 choose 的 pending 切换），
+       按到不存在的选项序号直接忽略——不 preventDefault、不弹提示，等于没按 */
+    if (k.length === 1 && k >= '1' && k <= '9') {
+      var qi = k.charCodeAt(0) - 49;
+      var qd = cur();
+      if (qi >= qd.o.length) return;   /* 没有这个选项：无反应 */
+      e.preventDefault();
+      var dbts = $all('#qOpts .opt');
+      if (dbts[qi]) dbts[qi].click();
     } else if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
       var q = cur();
       var i = 'ABCDEFGH'.indexOf(k);
@@ -2957,7 +2958,10 @@
       if (pb) pb.click();
     } else if (e.key === 'Enter') {
       if ($('.modal-mask')) return;
+      /* 多选题勾完按回车＝「确认作答」；其余情况回车仍是交卷确认 */
+      var cm = $('[data-act="confirm-multi"]');
       e.preventDefault();
+      if (cm && !cm.classList.contains('hidden')) { cm.click(); return; }
       confirmSubmit();
     }
   });
