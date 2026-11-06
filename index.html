@@ -4003,10 +4003,18 @@ window.ANSWER_KEY = {"T":{"1":"B","2":"B","3":"A","4":"C","5":"B","6":"A","7":"B
       if (pb) pb.click();
     } else if (e.key === 'Enter') {
       if ($('.modal-mask')) return;
-      /* 多选题勾完按回车＝「确认作答」；其余情况回车仍是交卷确认 */
+      /* 多选题勾完按回车＝「确认作答」；已判分的题回车＝下一题 */
       var cm = $('[data-act="confirm-multi"]');
       e.preventDefault();
       if (cm && !cm.classList.contains('hidden')) { cm.click(); return; }
+      /* v3.11.6 判分后回车＝下一题：原先会直接弹「确认交卷？（还有 N 题未作答）」，
+         刚判完分顺手回车就误触交卷，练习节奏被打断 */
+      var qe = cur();
+      if (sess.mode === 'practice' && sess.answers[qe.key]) {
+        var nb2 = $('[data-act="next"]');
+        if (nb2) nb2.click();
+        return;
+      }
       confirmSubmit();
     }
   });
