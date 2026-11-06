@@ -1457,10 +1457,14 @@
       if (q.t === 'multi') {
         var next = pendingOf(q);
         next = next.indexOf(L) >= 0 ? next.replace(L, '') : sortedLetters(next + L);
+        /* v3.11.5 判分后锁定：点绿色正确答案＝收藏，点其他一律不改状态 */
         if (sess.mode === 'practice' && sess.answers[q.key]) {
           var c9 = correctOf(q);
-      /* 答错的多选题允许重选，再点「确认」；选对则只收藏（v3.9.4），已答对的不允许改 */
-          if (!(c9 && sess.answers[q.key] !== c9)) { toast('本题已作答，可「清空本题」后重选'); return; }
+          if (c9 && sess.answers[q.key] !== c9) {
+            if (c9.indexOf(L) >= 0) { favOnCorrect(q); return; }
+            toast('本题已判分，选项已锁定（点绿色正确答案可收藏）'); return;
+          }
+          toast('本题已作答，可「清空本题」后重选'); return;
         }
         sess.pending[q.key] = next;
         if (sess.mode === 'exam') {
@@ -1530,7 +1534,8 @@
       var pending = (sess.mode === 'practice' && q.t === 'multi') ? pendingOf(q) : a;
       $all('.opt', opts).forEach(function (o) {
         var L = o.getAttribute('data-letter');
-        var showPend = sess.mode === 'practice' && q.t === 'multi' && (!a || (c && a !== c));
+        /* v3.11.5 只有未作答才显示暂存勾选；判分后勾选状态冻结（sel 跟随已提交答案） */
+        var showPend = sess.mode === 'practice' && q.t === 'multi' && !a;
         var sel = (showPend ? pending : a).indexOf(L) >= 0;
         o.classList.toggle('sel', sel);
         o.classList.toggle('correct', showKey && c.indexOf(L) >= 0);
@@ -1541,9 +1546,8 @@
         else mk.textContent = '';
       });
       var b = $('[data-act="confirm-multi"]', node);
-      /* 未作答，或已答错（可重选后确认收藏）时显示确认按钮 */
-      var needConfirm = sess.mode === 'practice' && q.t === 'multi' &&
-        (!sess.answers[q.key] || (c && sess.answers[q.key] !== c));
+      /* v3.11.5 只有未作答时显示「确认作答」；判分后按钮隐藏，不可重选 */
+      var needConfirm = sess.mode === 'practice' && q.t === 'multi' && !sess.answers[q.key];
       b.classList.toggle('hidden', !needConfirm);
     }
 
