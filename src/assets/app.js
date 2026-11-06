@@ -910,10 +910,15 @@
     return box;
   }
 
-  /* 断点续做条（全库随机 / 自定义 / 模拟考中断的练习） */
+  /* 断点续做条（全库随机 / 自定义 / 模拟考中断的练习）
+     v3.11.4：不再要求「已答 > 0」——只写了笔记、只翻了题的断点也要能续上，
+     否则刷新后回来只能重开，笔记虽然还在但题都找不到（用户实际踩到过）。 */
   function buildTempResume() {
-    if (!(db.temp && db.temp.order && db.temp.order.length && Object.keys(db.temp.answers || {}).length)) return null;
-    var tr = el('button', 'btn temp-resume', '⏵ 继续：' + db.temp.title + ' · 已答 ' + Object.keys(db.temp.answers).length + ' 题');
+    if (!(db.temp && db.temp.order && db.temp.order.length)) return null;
+    var doneN = Object.keys(db.temp.answers || {}).length;
+    var atN = Math.min((db.temp.idx || 0) + 1, db.temp.order.length);
+    var tr = el('button', 'btn temp-resume', '⏵ 继续：' + db.temp.title +
+      ' · 第 ' + atN + '/' + db.temp.order.length + ' 题 · 已答 ' + doneN + ' 题');
     tr.addEventListener('click', function () { resumeTemp(); });
     return tr;
   }
@@ -1370,8 +1375,16 @@
       if (!ta || !noteKey) return false;
       var q = QMAP[noteKey];
       if (!q) return false;
-      var had = !!noteOf(q);
+      var prevN = noteOf(q);
+      var prevTxt = prevN ? String(prevN.t || '') : '';
+      var had = !!prevN;
       var keep = setNote(q, ta.value);
+      /* v3.11.4 自己刚写的笔记：本题本次会话内直接可见，不用再点「查看笔记」。
+         只在内容真的变了时解除防剧透——换题/退出时的兜底 flush 会原样回写，
+         若也当成「新写」，旧笔记就会被顶开，防剧透形同虚设。 */
+      var nowTxt = String(ta.value == null ? '' : ta.value).replace(/\s+$/, '');
+      if (keep && nowTxt !== prevTxt) noteRevealed[q.key] = true;
+      if (had !== keep) paintCard();   /* 答题卡紫点 / 「有笔记」计数同步 */
       var badge = $('#noteBadge', node), btn = $('#btnNoteToggle', node);
       var n = noteOf(q), oc = Object.keys(optNotesOf(q)).length;
       if (badge) badge.textContent = n
@@ -1556,12 +1569,13 @@
     }
 
     function paintCard() {
-      var done = 0, flag = 0;
+      var done = 0, flag = 0, noted = 0;
       var byT = { single: 0, multi: 0, judge: 0 };
       sess.qs.forEach(function (q) {
         var d = !!sess.answers[q.key];
         if (d) { done++; byT[q.t]++; }
         if (sess.flags[q.key]) flag++;
+        if (noteHasContent(db.notes[q.key])) noted++;
       });
       $all('.pbar-track i', node).forEach(function (f) {
         var t = f.getAttribute('data-type');
@@ -1574,6 +1588,8 @@
       });
       $('#infoDone', node).textContent = String(done);
       $('#infoFlag', node).textContent = String(flag);
+      var infN = $('#infoNote', node);
+      if (infN) infN.textContent = String(noted);
       $('#infoLeft', node).textContent = String(sess.qs.length - done);
       $('#cardProgress', node).textContent = done + '/' + sess.qs.length;
       paintSheet();
@@ -1592,6 +1608,7 @@
           else cls += ' done';   /* 考试模式已答 / 练习模式未收录答案 */
         }
         if (sess.flags[q.key]) cls += ' flagged';
+        if (noteHasContent(db.notes[q.key])) cls += ' has-note';   /* 记过笔记：右下角紫点 */
         if (i === sess.idx) cls += ' cur';
         sheetChips[i].className = cls;
       }
@@ -1618,6 +1635,7 @@
       if (sess.pending) delete sess.pending[q.key];
       if (sess.persist) save();
       delete noteRevealed[q.key];   /* 清空本题＝回到未作答：笔记重新藏起来，防剧透 */
+      $('#qNote', node).classList.remove('editing');   /* 编辑框也收起，否则 paintNote 会按「正在编辑」继续显示 */
       paintOptions(); paintCard(); paintFeedback();
       paintNote(false); paintOptNotes();
     });
@@ -1663,12 +1681,14 @@
           e.preventDefault();
           noteFlush();
           noteBox.classList.remove('editing');
+          paintNote(false);   /* 保存后按「自己写的直接可见」重绘正文 */
           toast(noteOf(cur()) ? '笔记已保存' : '笔记已清空');
         }
       });
       $('[data-act="note-save"]', node).addEventListener('click', function () {
         noteFlush();
         noteBox.classList.remove('editing');
+        paintNote(false);
         toast(noteOf(cur()) ? '笔记已保存' : '笔记已清空');
       });
       $('[data-act="note-del"]', node).addEventListener('click', function () {
@@ -1680,6 +1700,7 @@
           save();
           paintNote(false);
           noteBox.classList.remove('editing');
+          paintCard();   /* v3.11.4 答题卡紫点 / 「有笔记」计数同步 */
           toast('笔记已删除');
         });
       });

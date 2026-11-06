@@ -658,3 +658,14 @@ select{
 .sheet-chip.flagged{box-shadow:0 0 0 2px #f59e0b inset}
 .sheet-chip.cur{outline:2px solid #2563eb;outline-offset:1px}
 .sheet-chip:active{filter:brightness(.92)}
+
+/* ---------- v3.11.4 答题卡「有笔记」标记 ---------- */
+.sheet-chip{position:relative}
+.sheet-chip.has-note::after{
+  content:'';position:absolute;right:2px;bottom:2px;width:5px;height:5px;border-radius:50%;
+  background:#7c3aed;box-shadow:0 0 0 1px #fff;
+}
+.sheet-chip.ok.has-note::after,
+.sheet-chip.bad.has-note::after,
+.sheet-chip.done.has-note::after{background:#fff;box-shadow:none}
+.sheet-legend .lg-note::before{background:#7c3aed;border-color:#7c3aed;border-radius:50%}
