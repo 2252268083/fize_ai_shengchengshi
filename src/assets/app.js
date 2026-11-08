@@ -295,6 +295,46 @@
     toast('已切换到「' + LAYOUT_NAME[next] + '」布局');
   }
 
+  /* ---------------- 夜间模式：light / dark，只手动切，选择跟本机走 ----------------
+     与 layout 同一套做法：db.settings 里存一个字符串 + 属性挂到 DOM 上。
+     区别是主题挂在 <html>（不是 body）—— html 的底色决定滚动区露出的颜色。 */
+  var THEMES = ['light', 'dark'];
+  var THEME_ICON = { light: '🌙', dark: '☀️' };
+  var THEME_TIP = { light: '切换到夜间模式（纯黑）', dark: '切换到日间模式' };
+  var THEME_META = { light: '#3b5bdb', dark: '#000000' };  /* 手机浏览器地址栏颜色 */
+  function theme() {
+    var v = db.settings && db.settings.theme;
+    return THEMES.indexOf(v) >= 0 ? v : 'light';
+  }
+  function applyTheme() {
+    var t = theme();
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', THEME_META[t]);
+  }
+  function themeName() { return theme() === 'dark' ? '夜间模式（纯黑）' : '日间模式'; }
+  function cycleTheme() {
+    var next = theme() === 'dark' ? 'light' : 'dark';
+    (db.settings || (db.settings = {})).theme = next;
+    save();
+    applyTheme();
+    paintThemeBtn();
+    /* 这里故意不调 render()：它会 app.innerHTML='' + scrollTo(0,0)，
+       答题答到一半切主题会丢滚动位置和正在写的笔记。主题全靠 CSS 变量，
+       属性一变浏览器自己重算，包括 JS 内联写的 var(--warn) 与 style.stroke。 */
+    toast('已切换到' + themeName());
+  }
+  function paintThemeBtn() {
+    var b = document.getElementById('btnTheme');
+    if (!b) return;
+    var t = theme();
+    var dark = t === 'dark';
+    b.textContent = THEME_ICON[t];
+    b.title = THEME_TIP[t];
+    b.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    b.setAttribute('aria-label', dark ? '日间模式' : '夜间模式');
+  }
+
   /* 本设备名称：备份文件携带，恢复时用于标记错题来源 */
   function deviceName() {
     var st = db.settings || (db.settings = {});
@@ -2044,8 +2084,8 @@
     var C = 2 * Math.PI * 64;
     ring.setAttribute('stroke-dasharray', String(C));
     ring.setAttribute('stroke-dashoffset', String(C));
-    var color = pct >= 0.8 ? '#16a34a' : pct >= 0.6 ? '#3b5bdb' : '#dc2626';
-    ring.setAttribute('stroke', color);
+    /* 用 style.stroke 而不是 setAttribute：presentation attribute 不解析 var()，切主题时不会跟着变 */
+    ring.style.stroke = pct >= 0.8 ? 'var(--ok)' : pct >= 0.6 ? 'var(--brand)' : 'var(--bad)';
     setTimeout(function () {
       ring.style.transition = 'stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)';
       ring.setAttribute('stroke-dashoffset', String(C * (1 - pct)));
@@ -2720,7 +2760,7 @@
 
   function statRowHtml(name, ok, total) {
     var pct = total ? Math.round(ok / total * 100) : 0;
-    var color = pct >= 80 ? 'var(--ok)' : pct >= 60 ? '#d97706' : 'var(--bad)';
+    var color = pct >= 80 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--bad)';
     return '<div class="stat-row"><span class="stat-name">' + escHtml(name) + '</span>' +
       '<span class="stat-bar"><i style="width:' + pct + '%;background:' + color + '"></i></span>' +
       '<b style="color:' + color + '">' + pct + '%</b>' +
@@ -2773,7 +2813,7 @@
     var maxN = Math.max.apply(null, days.map(function (d) { return d.n; }).concat([1]));
     var chart = '<div class="trend-chart">' + days.map(function (d) {
       var pct = d.n ? Math.round(d.ok / d.n * 100) : null;
-      var color = pct == null ? 'var(--line)' : (pct >= 80 ? 'var(--ok)' : pct >= 60 ? '#d97706' : 'var(--bad)');
+      var color = pct == null ? 'var(--line)' : (pct >= 80 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--bad)');
       var h = d.n ? Math.max(6, Math.round(d.n / maxN * 88)) : 0;
       return '<div class="trend-col" title="' + d.label + ' 作答 ' + d.n + ' 题' +
         (pct == null ? '' : '，正确率 ' + pct + '%') + '">' +
@@ -2971,7 +3011,7 @@
           var localNew = 0;
           db.history.forEach(function (h) { if (h.at > localNew) localNew = h.at; });
           var staleWarn = (pack.exportedAt && localNew > pack.exportedAt)
-            ? '<b style="color:#c0392b">注意：本机已有比这份备份更新的作答记录（最近一次 ' + relWhen(localNew) +
+            ? '<b style="color:var(--bad)">注意：本机已有比这份备份更新的作答记录（最近一次 ' + relWhen(localNew) +
               '），恢复会把这些更新内容覆盖掉。</b><br>' : '';
           showModal('恢复备份？',
             '来自「<b>' + escHtml(srcName) + '</b>」的备份，导出于 ' + escHtml(whenTxt) + '。<br>' +
@@ -2993,6 +3033,7 @@
               });
               var st = d.settings || {};
               st.deviceName = curName; /* 设备身份保持本机的，不跟备份走 */
+              st.theme = theme();      /* 外观同理：夜间/日间跟机器走，换台设备不强行改人家的亮暗 */
               /* 笔记合并：备份里有的题以备份内容为准，本机独有（备份里没有）的笔记保留 */
               var mergedNotes = db.notes || {};
               var noteIn = 0;
@@ -3010,6 +3051,8 @@
               if (d.temp) db.temp = d.temp;
               memOnly = false;
               save();
+              applyTheme();       /* 备份里若带 theme 已被本机值覆盖，这里重新落到 DOM */
+              paintThemeBtn();
               lastResult = null;
               route = 'home';
               render();
@@ -3127,6 +3170,8 @@
   $all('.top-link').forEach(function (b) {
     b.addEventListener('click', function () {
       var nav = b.getAttribute('data-nav');
+      /* 顶栏里的非导航按钮（夜间模式）自己绑事件，这里直接放行，别落到末尾的 render() */
+      if (!nav) return;
       if (nav === 'home') {
         if (route === 'quiz' && sess && !sess.done) {
           /* 一条题都没答也要落断点：模拟考/随机的题组、限时、配分口径全靠 db.temp 才能续上 */
@@ -3157,6 +3202,12 @@
     side.classList.remove('open');
   });
 
+  /* 夜间模式开关：按钮在 #app 外，render() 不会重建它，所以只绑一次 */
+  (function () {
+    var tb = document.getElementById('btnTheme');
+    if (tb) tb.addEventListener('click', cycleTheme);
+  })();
+
   window.addEventListener('beforeunload', function () { if (sess) persistPos(); });
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden' && sess) persistPos();
@@ -3164,6 +3215,8 @@
 
   /* ---------------- boot ---------------- */
   applyLayoutAttr();
+  applyTheme();      /* head 里的内联脚本已经设过一次（防闪白），这里按同一取值再对一遍 */
+  paintThemeBtn();
   if (!PAPERS.length) {
     app.appendChild(el('div', 'empty', '题库数据未加载，请检查 data/questions.js 是否存在'));
   } else {

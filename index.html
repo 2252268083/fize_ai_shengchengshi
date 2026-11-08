@@ -8,6 +8,18 @@
 <title>人工智能训练师 · 理论题库练习</title>
 <meta name="description" content="2026 年广东省人工智能与机器人技能大赛（人工智能训练师赛项）官方初赛理论题库练习，共 1445 题，含答案、知识点与解析、随机出题、错题本与学习记录。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233b5bdb'/%3E%3Ctext x='32' y='44' font-size='30' font-family='Arial,Helvetica,sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3EAI%3C/text%3E%3C/svg%3E">
+<!-- v3.13.0 夜间模式：必须在 app.css 之前跑，否则深色用户开机会闪一下白屏 -->
+<style>html[data-theme="dark"]{background:#000}</style>
+<script>
+(function(){try{
+  var d=JSON.parse(localStorage.getItem('aitp.v2')||'null');
+  if(d&&d.settings&&d.settings.theme==='dark'){
+    document.documentElement.setAttribute('data-theme','dark');
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m)m.setAttribute('content','#000000');
+  }
+}catch(e){}})();
+</script>
 <style>
 
 :root{
@@ -15,6 +27,7 @@
   --line:#e6eaf2; --brand:#3b5bdb; --brand-2:#5c7cfa; --brand-soft:#edf1ff;
   --ok:#16a34a; --ok-soft:#e8f7ee; --bad:#dc2626; --bad-soft:#fdeceb;
   --warn:#d97706; --warn-soft:#fff5e6; --radius:16px;
+  --bg-soft:#f1f5f9;   /* v3.13.0 补：.rev-item .r-an 一直在用 var(--bg-soft) 兜底，正式定义后夜间才好覆盖 */
   --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.06);
   --shadow-lg:0 20px 50px rgba(15,23,42,.14);
 }
@@ -56,6 +69,9 @@ a{color:var(--brand);text-decoration:none}
 }
 .top-link:hover{color:var(--brand);border-color:#c7d2fe;background:#f8faff}
 .top-link.active{background:var(--brand-soft);border-color:#c7d2fe;color:var(--brand);font-weight:600}
+/* v3.13.0 顶栏夜间模式开关：与 .top-link 同款外观，但没有 data-nav（不参与导航高亮） */
+.top-act{min-width:32px;justify-content:center;padding:7px 9px;font-size:14px;line-height:1}
+.top-act[aria-pressed="true"]{background:var(--brand-soft);border-color:#c7d2fe;color:var(--brand)}
 
 /* ---------- layout ---------- */
 .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 70px}
@@ -99,9 +115,6 @@ a{color:var(--brand);text-decoration:none}
 .modal-mask{
   position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);z-index:60;
   display:grid;place-items:center;padding:20px;animation:fade .18s;
-}
-  display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;
-  background:var(--warn-soft);border:1px solid #fde3bd;color:#8a5a10;font-size:12.8px;margin-top:16px;
 }
 
 /* ---------- quiz ---------- */
@@ -607,6 +620,10 @@ select{
   .jump-bar .timer{margin-left:auto}
 }
 @media (max-width:560px){
+  /* v3.13.0 顶栏多了一个夜间开关，320px 下必须收紧内边距，否则撑出横向滚动 */
+  .topbar-inner{gap:4px;padding:8px 8px}
+  .top-link{padding:6px 6px}
+  .top-act{padding:6px 5px;min-width:26px;font-size:13px}
   .h2-hero h1{font-size:18px}
   .h2-hero p{font-size:11.5px}
   .h2-num b{font-size:17px}
@@ -692,6 +709,190 @@ select{
 .sheet-chip.done.has-note::after{background:#fff;box-shadow:none}
 .sheet-legend .lg-note::before{background:#7c3aed;border-color:#7c3aed;border-radius:50%}
 
+/* =====================================================================
+   v3.13.0 夜间模式（纯黑 OLED）
+   ---------------------------------------------------------------
+   做法：变量层（重定义 16 个已有变量）+ 字面量覆盖层（只打 app.css 里
+   164 处硬编码色值）。整块追加在文件末尾，同特异性靠顺序取胜，
+   不用 !important，也不改上面任何一条既有规则。
+   属性挂在 <html> 上（不是 body）：body 的 background:var(--bg) 会跟着变量走，
+   而 html 自己的底色决定滚动区域露出来的颜色。
+   ===================================================================== */
+html[data-theme="dark"]{
+  color-scheme:dark;                  /* 不设的话原生滚动条、<select> 下拉面板还是白底 */
+  --bg:#000; --bg-soft:#101013;
+  --card:#0b0b0d; --raised:#121215; --hover:#17171b; --line:#2a2a31;
+  --ink:#f8fafc; --ink-2:#b9c0cc; --ink-3:#8b93a3;   /* 正文不用纯白，减轻黑底白字光晕 */
+  --brand:#8ea8ff; --brand-2:#a9bdff; --brand-soft:#1a2036;
+  --brand-fill:#3b5bdb;               /* 实心按钮底单独一个中间调：白字压浅蓝只有 2.3:1 */
+  --ok:#4ade80; --ok-soft:#10261a; --ok-fill:#15803d;
+  --bad:#ff7b7b; --bad-soft:#2a1214; --bad-fill:#b91c1c;
+  --warn:#fbbf24; --warn-soft:#2a1f10;
+  --glass:rgba(8,8,10,.82); --mask:rgba(0,0,0,.72);
+  --shadow:0 1px 2px rgba(0,0,0,.7),0 8px 24px rgba(0,0,0,.55);
+  --shadow-lg:0 20px 50px rgba(0,0,0,.75);
+  background:#000;
+}
+html[data-theme="dark"] ::selection{background:rgba(142,168,255,.35)}
+/* 黑底上 UA 默认焦点环几乎看不见 */
+html[data-theme="dark"] :focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+/* ---------- 顶栏 ---------- */
+html[data-theme="dark"] .topbar{background:var(--glass)}
+html[data-theme="dark"] .brand .logo{background:linear-gradient(135deg,#3450c9,#6d3fd8);box-shadow:0 4px 12px rgba(0,0,0,.55)}
+html[data-theme="dark"] .top-link{background:var(--raised);color:var(--ink-2)}
+html[data-theme="dark"] .top-link:hover{background:var(--hover);border-color:#3b4a86;color:var(--brand)}
+html[data-theme="dark"] .top-link.active{background:var(--brand-soft);border-color:#3b4a86;color:var(--brand)}
+html[data-theme="dark"] .top-act[aria-pressed="true"]{background:var(--brand-soft);border-color:#3b4a86;color:var(--brand)}
+
+/* ---------- 按钮 ---------- */
+html[data-theme="dark"] .btn{background:var(--raised);color:var(--ink)}
+html[data-theme="dark"] .btn:hover{border-color:#3b4a86;background:var(--hover);color:var(--brand)}
+html[data-theme="dark"] .btn-primary{background:var(--brand-fill);border-color:var(--brand-fill);color:#fff;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+html[data-theme="dark"] .btn-primary:hover{background:#3450c9;border-color:#3450c9;color:#fff}
+html[data-theme="dark"] .btn-ghost{background:transparent;border-color:transparent;color:var(--ink-2)}
+html[data-theme="dark"] .btn-ghost:hover{background:var(--hover);color:var(--brand)}
+html[data-theme="dark"] .btn[disabled]{opacity:.55}
+/* .temp-resume 自带蓝色软底，但 html[dark] .btn 会把它压成灰底，按更高特异性补回 */
+html[data-theme="dark"] .temp-resume{background:var(--brand-soft);border-color:var(--brand-2);color:var(--brand)}
+html[data-theme="dark"] .mini-card:hover,
+html[data-theme="dark"] .mod-card:hover{border-color:#3b4a86}
+
+/* ---------- 弹窗 / 提示 ---------- */
+html[data-theme="dark"] .modal-mask{background:var(--mask)}
+html[data-theme="dark"] .modal{background:var(--raised)}
+html[data-theme="dark"] .toast{background:rgba(28,28,33,.96);border:1px solid var(--line);color:var(--ink)}
+
+/* ---------- 输入控件（原来只写了白底、没写 color） ---------- */
+html[data-theme="dark"] .jump-bar .jump-input input,
+html[data-theme="dark"] .jump-bar .jump-search input,
+html[data-theme="dark"] .custom-row input,
+html[data-theme="dark"] .custom-row select,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .note-edit textarea,
+html[data-theme="dark"] .opt-note-input,
+html[data-theme="dark"] .note-inline,
+html[data-theme="dark"] .src-select{background:var(--raised);color:var(--ink);border-color:var(--line)}
+html[data-theme="dark"] .search-drop{background:var(--raised);box-shadow:0 10px 28px rgba(0,0,0,.6)}
+html[data-theme="dark"] .search-row:hover{background:var(--brand-soft)}
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] .note-edit textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(142,168,255,.18)}
+
+/* ---------- 标签 ---------- */
+html[data-theme="dark"] .tag{background:var(--brand-soft);color:var(--brand)}
+html[data-theme="dark"] .tag.gray{background:#1c1c21;color:var(--ink-2)}
+html[data-theme="dark"] .tag.judge{background:var(--ok-soft);color:var(--ok)}
+html[data-theme="dark"] .tag.multi{background:var(--warn-soft);color:#f0c07a}
+html[data-theme="dark"] .tag.gid{background:var(--brand-soft);color:var(--brand)}
+html[data-theme="dark"] .tag.gid.gid-s{background:#3a2a08;color:#fcd34d}
+
+/* ---------- 答题页 ---------- */
+html[data-theme="dark"] .timer{background:var(--raised)}
+html[data-theme="dark"] .timer.warn{background:var(--bad-soft);border-color:#6b2b2b;color:var(--bad)}
+html[data-theme="dark"] .q-stem{color:var(--ink)}
+html[data-theme="dark"] .q-head .fav{color:#3a3a44}
+html[data-theme="dark"] .q-head .fav.on{color:var(--warn)}
+html[data-theme="dark"] .opt{background:var(--bg-soft)}
+html[data-theme="dark"] .opt:hover{background:var(--hover);border-color:#3b4a86}
+html[data-theme="dark"] .opt .letter{background:#1c1c21;color:var(--ink-2)}
+html[data-theme="dark"] .opt .txt{color:var(--ink)}
+html[data-theme="dark"] .opt.sel{background:var(--brand-soft);border-color:var(--brand);box-shadow:0 0 0 3px rgba(142,168,255,.16)}
+html[data-theme="dark"] .opt.sel .letter{background:var(--brand-fill);color:#fff}
+html[data-theme="dark"] .opt.correct{background:var(--ok-soft);border-color:#2f7d4f}
+html[data-theme="dark"] .opt.correct .letter{background:var(--ok-fill);color:#fff}
+html[data-theme="dark"] .opt.wrong{background:var(--bad-soft);border-color:#7f3535}
+html[data-theme="dark"] .opt.wrong .letter{background:var(--bad-fill);color:#fff}
+html[data-theme="dark"] .feedback{background:var(--ok-soft);color:var(--ok);border-color:#1f5636}
+html[data-theme="dark"] .feedback.bad{background:var(--bad-soft);color:var(--bad);border-color:#6b2b2b}
+html[data-theme="dark"] .feedback.unknown{background:#17171b;color:var(--ink-2);border-color:var(--line)}
+
+/* ---------- 旧答题卡 + 图例 ---------- */
+html[data-theme="dark"] .cell{background:var(--raised)}
+html[data-theme="dark"] .cell.done{background:var(--brand-soft);border-color:#3b4a86;color:var(--brand)}
+html[data-theme="dark"] .legend .l1{background:var(--brand-soft);border-color:#3b4a86}
+html[data-theme="dark"] .legend .l2{background:var(--raised)}
+html[data-theme="dark"] .side .mini-info div{background:var(--bg-soft)}
+@media (max-width:900px){html[data-theme="dark"] .side{box-shadow:-10px 0 40px rgba(0,0,0,.65)}}
+
+/* ---------- 结果页 ---------- */
+html[data-theme="dark"] .kpi{background:var(--bg-soft);border-color:#232331}
+html[data-theme="dark"] .ring-track{stroke:#2a2a31}          /* SVG 属性不认 var()，只能走类 */
+html[data-theme="dark"] .rev-item .r-an{background:var(--bg-soft)}
+html[data-theme="dark"] .rev-item .r-src{background:#221a06;border-color:#4a3a10;color:#e8b866}
+html[data-theme="dark"] .ans-badge.ok{background:var(--ok-soft);color:var(--ok)}
+html[data-theme="dark"] .ans-badge.bad{background:var(--bad-soft);color:var(--bad)}
+html[data-theme="dark"] .ans-badge.mid{background:#1c1c21;color:var(--ink-2)}
+
+/* ---------- 列表 / 错题本 / 未答芯片 ---------- */
+html[data-theme="dark"] .row{background:var(--card)}
+html[data-theme="dark"] .src-badge{background:var(--warn-soft);border-color:#574019;color:#f0c07a}
+html[data-theme="dark"] .start-warn{color:#f0c07a;border-color:#574019}
+html[data-theme="dark"] .un-jump{background:var(--bg-soft)}
+html[data-theme="dark"] .un-chip{background:#14161b;border-color:#7f3535;color:#ff8f8f}
+html[data-theme="dark"] .un-chip:active{background:var(--bad-soft)}
+
+/* ---------- 笔记 / 选项备注 ---------- */
+html[data-theme="dark"] .note-box{background:var(--bg-soft);border-color:#2f2f38}
+html[data-theme="dark"] .note-box.has-note{background:#12141c;border-color:#3b4a86}
+html[data-theme="dark"] .note-view,
+html[data-theme="dark"] .note-row .note-text{color:var(--ink)}
+html[data-theme="dark"] .note-badge-row,
+html[data-theme="dark"] .opt-note{background:#141a2e;border-color:#27345c;color:#a8bcff}
+html[data-theme="dark"] .opt-note-add{color:#4a5680}
+html[data-theme="dark"] .opt-note-add:hover,
+html[data-theme="dark"] .opt-note-add.on{color:var(--brand);background:var(--brand-soft)}
+
+/* ---------- 首页 / 模块页 ---------- */
+html[data-theme="dark"] .h2-hero{
+  background:linear-gradient(120deg,#1b2a6b 0%,#24407f 46%,#3b2a66 100%);
+  border:1px solid #2e3f7a;box-shadow:0 14px 32px rgba(0,0,0,.55);color:#f2f5ff;
+}
+html[data-theme="dark"] .h2-hero p{color:rgba(242,245,255,.78)}
+html[data-theme="dark"] .h2-num span{color:rgba(242,245,255,.7)}
+html[data-theme="dark"] .h2-note{background:var(--ok-soft);border-color:#1f5636;color:var(--ok)}
+html[data-theme="dark"] .h2-note-more{color:#7ee2a8}
+html[data-theme="dark"] .mc-chip{background:var(--bg-soft);border-color:#242a3d}
+html[data-theme="dark"] .layout-switch{background:var(--raised)}
+html[data-theme="dark"] .layout-switch:hover{background:var(--brand-soft);border-color:#3b4a86}
+html[data-theme="dark"] .mod-bar{background:#1c1c21}
+html[data-theme="dark"] .seg button{background:var(--raised)}
+html[data-theme="dark"] .seg button.on{background:var(--brand-fill);color:#fff}
+html[data-theme="dark"] .fbtn{background:var(--raised)}
+html[data-theme="dark"] .fbtn.on{background:var(--brand-fill);border-color:var(--brand-fill);color:#fff}
+html[data-theme="dark"] .fbtn:hover{border-color:#3b4a86;color:var(--brand)}
+html[data-theme="dark"] .order-btn.on{background:var(--brand-soft);border-color:#3b4a86;color:var(--brand)}
+html[data-theme="dark"] .jump-bar .jt.on{background:var(--brand-fill);border-color:var(--brand-fill);color:#fff}
+
+/* ---------- 答题卡题号格子 ---------- */
+html[data-theme="dark"] .sheet-grid{background:var(--bg-soft)}
+html[data-theme="dark"] .sheet-chip{background:var(--raised)}
+html[data-theme="dark"] .sheet-legend .lg::before{background:var(--raised)}
+html[data-theme="dark"] .sheet-legend .lg-flag::before{background:var(--raised);border-color:var(--warn)}
+html[data-theme="dark"] .sheet-chip.flagged{box-shadow:0 0 0 2px var(--warn) inset}
+html[data-theme="dark"] .sheet-chip.cur{outline-color:var(--brand)}
+html[data-theme="dark"] .sheet-chip.has-note::after{box-shadow:0 0 0 1px #000}
+/* 对/错/已答三色的绿红蓝在白字下对比更高，保持原值不动。
+   注意：上面 html[dark] .sheet-chip 的特异性(0,2,1)比 .sheet-chip.ok(0,2,0) 高，
+   会把三个状态类的底色一起压掉，必须按同样前缀重新声明一遍。 */
+html[data-theme="dark"] .sheet-chip.ok{background:#16a34a;border-color:#16a34a;color:#fff}
+html[data-theme="dark"] .sheet-chip.bad{background:#dc2626;border-color:#dc2626;color:#fff}
+html[data-theme="dark"] .sheet-chip.done{background:#3b82f6;border-color:#3b82f6;color:#fff}
+html[data-theme="dark"] .sheet-legend .lg-ok::before{background:#16a34a;border-color:#16a34a}
+html[data-theme="dark"] .sheet-legend .lg-bad::before{background:#dc2626;border-color:#dc2626}
+html[data-theme="dark"] .sheet-legend .lg-done::before{background:#3b82f6;border-color:#3b82f6}
+
+/* 打印本页时恢复浅色：夜间变量会把纸面刷黑 */
+@media print{
+  html[data-theme="dark"]{
+    color-scheme:light;
+    --bg:#fff;--bg-soft:#f1f5f9;--card:#fff;--raised:#fff;--hover:#fff;--line:#e6eaf2;
+    --ink:#0f172a;--ink-2:#475569;--ink-3:#94a3b8;--glass:#fff;--mask:transparent;
+    background:#fff;
+  }
+  html[data-theme="dark"] .topbar{background:#fff}
+}
+
 </style>
 </head>
 <body>
@@ -709,6 +910,7 @@ select{
     <button class="top-link" data-nav="wrong">错题本 <span id="navWrong"></span></button>
     <button class="top-link" data-nav="notes">笔记 <span id="navNotes"></span></button>
     <button class="top-link" data-nav="key">答案管理</button>
+    <button class="top-link top-act" id="btnTheme" aria-pressed="false" aria-label="夜间模式" title="切换到夜间模式（纯黑）">🌙</button>
   </div>
 </header>
 
@@ -875,7 +1077,7 @@ select{
     <div class="result-hero">
       <div class="score-ring">
         <svg viewBox="0 0 150 150" width="100%" height="100%">
-          <circle cx="75" cy="75" r="64" fill="none" stroke="#eef1f7" stroke-width="12"></circle>
+          <circle class="ring-track" cx="75" cy="75" r="64" fill="none" stroke="#eef1f7" stroke-width="12"></circle>
           <circle id="ring" cx="75" cy="75" r="64" fill="none" stroke="#3b5bdb" stroke-width="12"
                   stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="402"></circle>
         </svg>
@@ -1339,6 +1541,46 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
     applyLayoutAttr();
     render();
     toast('已切换到「' + LAYOUT_NAME[next] + '」布局');
+  }
+
+  /* ---------------- 夜间模式：light / dark，只手动切，选择跟本机走 ----------------
+     与 layout 同一套做法：db.settings 里存一个字符串 + 属性挂到 DOM 上。
+     区别是主题挂在 <html>（不是 body）—— html 的底色决定滚动区露出的颜色。 */
+  var THEMES = ['light', 'dark'];
+  var THEME_ICON = { light: '🌙', dark: '☀️' };
+  var THEME_TIP = { light: '切换到夜间模式（纯黑）', dark: '切换到日间模式' };
+  var THEME_META = { light: '#3b5bdb', dark: '#000000' };  /* 手机浏览器地址栏颜色 */
+  function theme() {
+    var v = db.settings && db.settings.theme;
+    return THEMES.indexOf(v) >= 0 ? v : 'light';
+  }
+  function applyTheme() {
+    var t = theme();
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', THEME_META[t]);
+  }
+  function themeName() { return theme() === 'dark' ? '夜间模式（纯黑）' : '日间模式'; }
+  function cycleTheme() {
+    var next = theme() === 'dark' ? 'light' : 'dark';
+    (db.settings || (db.settings = {})).theme = next;
+    save();
+    applyTheme();
+    paintThemeBtn();
+    /* 这里故意不调 render()：它会 app.innerHTML='' + scrollTo(0,0)，
+       答题答到一半切主题会丢滚动位置和正在写的笔记。主题全靠 CSS 变量，
+       属性一变浏览器自己重算，包括 JS 内联写的 var(--warn) 与 style.stroke。 */
+    toast('已切换到' + themeName());
+  }
+  function paintThemeBtn() {
+    var b = document.getElementById('btnTheme');
+    if (!b) return;
+    var t = theme();
+    var dark = t === 'dark';
+    b.textContent = THEME_ICON[t];
+    b.title = THEME_TIP[t];
+    b.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    b.setAttribute('aria-label', dark ? '日间模式' : '夜间模式');
   }
 
   /* 本设备名称：备份文件携带，恢复时用于标记错题来源 */
@@ -3090,8 +3332,8 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
     var C = 2 * Math.PI * 64;
     ring.setAttribute('stroke-dasharray', String(C));
     ring.setAttribute('stroke-dashoffset', String(C));
-    var color = pct >= 0.8 ? '#16a34a' : pct >= 0.6 ? '#3b5bdb' : '#dc2626';
-    ring.setAttribute('stroke', color);
+    /* 用 style.stroke 而不是 setAttribute：presentation attribute 不解析 var()，切主题时不会跟着变 */
+    ring.style.stroke = pct >= 0.8 ? 'var(--ok)' : pct >= 0.6 ? 'var(--brand)' : 'var(--bad)';
     setTimeout(function () {
       ring.style.transition = 'stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)';
       ring.setAttribute('stroke-dashoffset', String(C * (1 - pct)));
@@ -3766,7 +4008,7 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
 
   function statRowHtml(name, ok, total) {
     var pct = total ? Math.round(ok / total * 100) : 0;
-    var color = pct >= 80 ? 'var(--ok)' : pct >= 60 ? '#d97706' : 'var(--bad)';
+    var color = pct >= 80 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--bad)';
     return '<div class="stat-row"><span class="stat-name">' + escHtml(name) + '</span>' +
       '<span class="stat-bar"><i style="width:' + pct + '%;background:' + color + '"></i></span>' +
       '<b style="color:' + color + '">' + pct + '%</b>' +
@@ -3819,7 +4061,7 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
     var maxN = Math.max.apply(null, days.map(function (d) { return d.n; }).concat([1]));
     var chart = '<div class="trend-chart">' + days.map(function (d) {
       var pct = d.n ? Math.round(d.ok / d.n * 100) : null;
-      var color = pct == null ? 'var(--line)' : (pct >= 80 ? 'var(--ok)' : pct >= 60 ? '#d97706' : 'var(--bad)');
+      var color = pct == null ? 'var(--line)' : (pct >= 80 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--bad)');
       var h = d.n ? Math.max(6, Math.round(d.n / maxN * 88)) : 0;
       return '<div class="trend-col" title="' + d.label + ' 作答 ' + d.n + ' 题' +
         (pct == null ? '' : '，正确率 ' + pct + '%') + '">' +
@@ -4017,7 +4259,7 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
           var localNew = 0;
           db.history.forEach(function (h) { if (h.at > localNew) localNew = h.at; });
           var staleWarn = (pack.exportedAt && localNew > pack.exportedAt)
-            ? '<b style="color:#c0392b">注意：本机已有比这份备份更新的作答记录（最近一次 ' + relWhen(localNew) +
+            ? '<b style="color:var(--bad)">注意：本机已有比这份备份更新的作答记录（最近一次 ' + relWhen(localNew) +
               '），恢复会把这些更新内容覆盖掉。</b><br>' : '';
           showModal('恢复备份？',
             '来自「<b>' + escHtml(srcName) + '</b>」的备份，导出于 ' + escHtml(whenTxt) + '。<br>' +
@@ -4039,6 +4281,7 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
               });
               var st = d.settings || {};
               st.deviceName = curName; /* 设备身份保持本机的，不跟备份走 */
+              st.theme = theme();      /* 外观同理：夜间/日间跟机器走，换台设备不强行改人家的亮暗 */
               /* 笔记合并：备份里有的题以备份内容为准，本机独有（备份里没有）的笔记保留 */
               var mergedNotes = db.notes || {};
               var noteIn = 0;
@@ -4056,6 +4299,8 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
               if (d.temp) db.temp = d.temp;
               memOnly = false;
               save();
+              applyTheme();       /* 备份里若带 theme 已被本机值覆盖，这里重新落到 DOM */
+              paintThemeBtn();
               lastResult = null;
               route = 'home';
               render();
@@ -4173,6 +4418,8 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
   $all('.top-link').forEach(function (b) {
     b.addEventListener('click', function () {
       var nav = b.getAttribute('data-nav');
+      /* 顶栏里的非导航按钮（夜间模式）自己绑事件，这里直接放行，别落到末尾的 render() */
+      if (!nav) return;
       if (nav === 'home') {
         if (route === 'quiz' && sess && !sess.done) {
           /* 一条题都没答也要落断点：模拟考/随机的题组、限时、配分口径全靠 db.temp 才能续上 */
@@ -4203,6 +4450,12 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
     side.classList.remove('open');
   });
 
+  /* 夜间模式开关：按钮在 #app 外，render() 不会重建它，所以只绑一次 */
+  (function () {
+    var tb = document.getElementById('btnTheme');
+    if (tb) tb.addEventListener('click', cycleTheme);
+  })();
+
   window.addEventListener('beforeunload', function () { if (sess) persistPos(); });
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden' && sess) persistPos();
@@ -4210,6 +4463,8 @@ window.ANSWER_KEY["S"] = {"1":"B","2":"B","3":"B","4":"B","5":"B","6":"B","7":"B
 
   /* ---------------- boot ---------------- */
   applyLayoutAttr();
+  applyTheme();      /* head 里的内联脚本已经设过一次（防闪白），这里按同一取值再对一遍 */
+  paintThemeBtn();
   if (!PAPERS.length) {
     app.appendChild(el('div', 'empty', '题库数据未加载，请检查 data/questions.js 是否存在'));
   } else {
