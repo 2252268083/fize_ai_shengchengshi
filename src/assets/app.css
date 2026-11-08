@@ -125,7 +125,12 @@ a{color:var(--brand);text-decoration:none}
 .custom-row{display:flex;gap:10px;flex-wrap:wrap}
 .custom-row input{flex:1;min-width:220px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff}
 .custom-row input:focus{border-color:var(--brand)}
+/* 自定义组卷的题库选择：两套题库题号段不同，必须先选卷再填题号 */
+.custom-row select{padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff;color:var(--ink);max-width:220px}
+.custom-row select:focus{border-color:var(--brand)}
 .temp-resume{margin:-4px 0 18px;width:100%;text-align:left;background:var(--brand-soft);border:1.5px dashed var(--brand-2);color:var(--brand);font-weight:600}
+/* 断点条与"继续"按钮的文字会带上卷名 + 进度，手机窄屏必须允许换行，否则撑出横向滚动 */
+.temp-resume,.mc-resume,.mc-best{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.45}
 /* v3.9.2 清空回滚点条：清空作答后首页出现，可一键恢复或丢弃 */
 .clear-undo{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:-4px 0 18px;padding:10px 14px;background:var(--brand-soft);border:1.5px dashed var(--brand-2);border-radius:10px}
 .clear-undo .cu-text{flex:1;min-width:200px;font-size:13px;color:var(--brand);font-weight:600}
@@ -168,6 +173,8 @@ a{color:var(--brand);text-decoration:none}
 .q-head{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12.5px;margin-bottom:12px}
 .q-head .num{color:var(--brand);font-weight:800;font-size:13px}
 .tag.gid{background:var(--brand-soft);color:var(--brand);font-weight:700;cursor:default}
+/* 预测题库题号（S#12）：琥珀色，和官方题库的蓝色 #12 一眼分开 */
+.tag.gid.gid-s{background:#fef3c7;color:#92400e}
 .q-head .fav{margin-left:auto;border:0;background:none;font-size:17px;line-height:1;color:#d7dce8;padding:2px}
 .q-head .fav.on{color:#f59e0b}
 .q-stem{
@@ -272,6 +279,8 @@ a{color:var(--brand);text-decoration:none}
 .rev-item .ro{font-size:13.5px;color:var(--ink-2);margin:3px 0;display:flex;gap:8px}
 .rev-item .ro b{font-weight:700;color:var(--ink)}
 .rev-item .r-an{font-size:13px;color:var(--ink-2);background:var(--bg-soft,#f1f5f9);border-radius:8px;padding:8px 10px;margin:8px 0 2px;line-height:1.7;white-space:pre-wrap}
+/* 预测题的"依据"行：和解析同款但偏琥珀，提醒这是自编题的出处而非官方解析 */
+.rev-item .r-src{font-size:12.5px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 10px;margin:6px 0 2px;line-height:1.7;white-space:pre-wrap}
 .ans-badge{font-size:11.5px;padding:2px 8px;border-radius:999px;font-weight:700}
 .ans-badge.ok{background:var(--ok-soft);color:#0f7a3d}
 .ans-badge.bad{background:var(--bad-soft);color:#b91c1c}
@@ -530,6 +539,8 @@ select{
   position:relative;overflow:hidden;
 }
 .main-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--brand),#7c3aed)}
+/* 两套题库并排：A 布局是 block 流，相邻主卡之间补间距；B 布局左列是 flex+gap，无需重复 */
+[data-layout="a"] .main-card + .main-card{margin-top:14px}
 .mc-left{min-width:0}
 .mc-left h3{margin:0 0 3px;font-size:19px}
 .mc-meta{margin:0 0 12px;color:var(--ink-3);font-size:12.5px}

@@ -13,20 +13,29 @@
   var ALL = [];
   var BY_ID = {};
   var QMAP = {};
-  var NMAP = {};   /* 全局题号 -> 题目（题库全局编号，单选→多选→判断顺序） */
-  var MAXN = 0;
+  /* 题号索引必须分卷：每卷都从 1 开始编号，共用一张表会让后一卷的同号题永远取不到 */
+  var NMAP = {};   /* NMAP[pid][n] -> 题目 */
+  var MAXN = {};   /* MAXN[pid] -> 该卷最大题号 */
   var TYPES = ['single', 'multi', 'judge'];
   PAPERS.forEach(function (p) {
     BY_ID[p.id] = p;
+    NMAP[p.id] = {};
+    MAXN[p.id] = 0;
     p.questions.forEach(function (q) {
       q.pid = p.id;
       q.key = p.id + '#' + q.n;
       ALL.push(q);
       QMAP[q.key] = q;
-      if (!NMAP[q.n]) NMAP[q.n] = q;
-      if (q.n > MAXN) MAXN = q.n;
+      NMAP[p.id][q.n] = q;
+      if (q.n > MAXN[p.id]) MAXN[p.id] = q.n;
     });
   });
+
+  /* 题号显示：官方卷沿用 #n（用户已习惯）；其余卷必须带卷前缀，否则两卷 #1 无法区分 */
+  function gid(q) { return q.pid === 'T' ? '#' + q.n : q.pid + '#' + q.n; }
+  /* 混排场景（错题本 / 笔记 / 搜索 / 打印 / 回顾列表）一律带卷前缀 */
+  function gidFull(q) { return q.pid + '#' + q.n; }
+  function bankTitle(pid) { return BY_ID[pid] ? BY_ID[pid].title : String(pid); }
 
   function shuffle(arr) {
     for (var i = arr.length - 1; i > 0; i--) {
@@ -363,14 +372,17 @@
     enterQuiz(pid, mod, mode, st, ms, list);
   }
 
-  function beginSet(qs, title, mode, random, persistOpt, tempKey) {
+  /* opts: {limitSec: 固定时长秒数, weighted: 按官方配分计分} —— 模拟考用，其余调用不传 */
+  function beginSet(qs, title, mode, random, persistOpt, tempKey, opts) {
+    opts = opts || {};
     if (random) shuffle(qs);
+    var limitSec = opts.limitSec || Math.max(600, qs.length * 54);
     sess = {
       pid: null, mod: null, title: title, mode: mode, qs: qs,
       answers: {}, flags: {}, idx: 0, st: null, ms: null,
       persist: !!persistOpt, tempKey: tempKey || null, startAt: Date.now(), pending: {},
-      deadline: mode === 'exam' ? Date.now() + Math.max(600, qs.length * 54) * 1000 : 0,
-      limit: Math.max(600, qs.length * 54), done: false,
+      deadline: mode === 'exam' ? Date.now() + limitSec * 1000 : 0,
+      limit: limitSec, done: false, weighted: !!opts.weighted,
       random: !!random
     };
     if (tempKey) { db.temp = null; save(); }  /* 新题组替换旧断点 */
@@ -420,7 +432,8 @@
         key: sess.tempKey, title: sess.title, mode: sess.mode,
         order: sess.qs.map(function (q) { return q.key; }), idx: sess.idx,
         answers: sess.answers, flags: sess.flags, deadline: sess.deadline || 0,
-        random: !!sess.random, at: Date.now()
+        random: !!sess.random, at: Date.now(),
+        limit: sess.limit || 0, weighted: !!sess.weighted   /* 断点续做要保住限时与配分口径 */
       };
       save();
     }
@@ -437,7 +450,8 @@
       answers: t.answers || {}, flags: t.flags || {},
       idx: Math.min(t.idx || 0, qs.length - 1), st: null, ms: null,
       persist: true, tempKey: t.key, startAt: Date.now(), pending: {},
-      deadline: t.deadline || 0, limit: examLimit(qs.length), done: false, random: !!t.random
+      deadline: t.deadline || 0, limit: t.limit || examLimit(qs.length), done: false,
+      weighted: !!t.weighted, random: !!t.random
     };
     route = 'quiz';
     render();
@@ -445,17 +459,26 @@
   }
 
   /* ---------------- scoring ---------------- */
+  /* 官方卷面配分（比赛通知 组卷安排表）：单选 1 分 / 多选 2 分 / 判断 0.5 分。
+     只有模拟考（sess.weighted）按配分折算，其余模式仍是"每题 1 分"，
+     这样官方卷 1445 题的整套/模块分数口径与历史记录完全不变。 */
+  var TYPE_SCORE = { single: 1, multi: 2, judge: 0.5 };
+  function round1(x) { return Math.round(x * 10) / 10; }
+
   function evaluate(s) {
+    var W = s.weighted ? TYPE_SCORE : null;
     var stat = { single: [0, 0], multi: [0, 0], judge: [0, 0] };
-    var score = 0, unknown = 0, blank = 0, wrong = [];
+    var score = 0, total = 0, unknown = 0, blank = 0, wrong = [];
     s.qs.forEach(function (q) {
+      var w = W ? (W[q.t] || 1) : 1;
       var c = correctOf(q), a = s.answers[q.key] || '';
-      stat[q.t][1]++;
+      total += w;
+      stat[q.t][1] += w;
       if (!c) { unknown++; return; }
-      if (a === c) { score++; stat[q.t][0]++; }
+      if (a === c) { score += w; stat[q.t][0] += w; }
       else { if (!a) blank++; else wrong.push(q); }
     });
-    return { score: score, stat: stat, unknown: unknown, blank: blank, wrong: wrong, total: s.qs.length };
+    return { score: round1(score), stat: stat, unknown: unknown, blank: blank, wrong: wrong, total: round1(total) };
   }
 
   function addWrong(q) {
@@ -617,9 +640,15 @@
       if (s && s.answers[q.key]) byType[q.t].done++;
     });
     var done = s ? Object.keys(s.answers).length : 0;
-    var best = null;
+    /* 本卷最高分：按百分制取历史最高。旧代码写死 total===100，
+       而整套卷是 1445 题，条件永不成立 —— 徽标从 v3 起就没显示过，这里一并修掉 */
+    var best = null, bestPct = -1;
     db.history.forEach(function (h) {
-      if (h.pid === p.id && (!h.mod || h.mod === 'all') && (h.total || 100) === 100 && (best === null || h.score > best)) best = h.score;
+      if (h.pid !== p.id || (h.mod && h.mod !== 'all')) return;
+      var tot = h.total || p.questions.length || 1;
+      if (!tot) return;
+      var pct = h.score / tot;
+      if (pct > bestPct) { bestPct = pct; best = Math.round(pct * 100); }
     });
     var recent = null, recentMod = null;
     if (s && s.sessions) {
@@ -728,12 +757,12 @@
         } });
   }
 
-  /* 模拟考试：随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟（临时会话，独立答案） */
+  /* 模拟考试：按官方卷面 110 题（60 单选 / 10 多选 / 40 判断），限时 90 分钟，按 1/2/0.5 配分 */
   function newMockExam() {
-    var qs = pickMock().map(function (q) {
-      return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
-    });
-    beginSet(qs, '模拟考试（100 题）', 'exam', false, true, 'mock');
+    var qs = pickMock();   /* 不裁字段：模拟考回顾也要能看到知识点、解析与依据 */
+    beginSet(qs, '模拟考试（官方卷面 110 题）', 'exam', false, true, 'mock',
+      { limitSec: 90 * 60, weighted: true });
+    toast('已按初赛卷面抽题：60 单选 + 10 多选 + 40 判断，限时 90 分钟');
   }
   function startMockExam() {
     var t = db.temp;
@@ -746,12 +775,15 @@
     newMockExam();
   }
 
-  /* 自定义题库训练：题号/范围用「、」分隔，组卷后练习 */
-  function startCustomSet(raw) {
-    var nos = parseCustomNos(raw, MAXN);
-    if (!nos.length) { toast('请输入有效题号，如：1-50、850、1081'); return; }
-    var qs = nos.map(function (n) { return NMAP[n]; }).filter(Boolean);
-    beginSet(qs, '自定义题库（' + qs.length + ' 题）', 'practice', false, true, 'custom');
+  /* 自定义题库训练：题号/范围用「、」分隔，可指定从哪一套题库取题 */
+  function startCustomSet(raw, pid) {
+    pid = pid || PAPERS[0].id;
+    var nos = parseCustomNos(raw, MAXN[pid] || 0);
+    if (!nos.length) { toast('请输入有效题号，如：1-50、120、165'); return; }
+    var idx = NMAP[pid] || {};
+    var qs = nos.map(function (n) { return idx[n]; }).filter(Boolean);
+    if (!qs.length) { toast(bankTitle(pid) + ' 没有这些题号'); return; }
+    beginSet(qs, bankTitle(pid) + ' · 自定义（' + qs.length + ' 题）', 'practice', false, true, 'custom');
     toast('已组卷 ' + qs.length + ' 题，开始训练');
   }
 
@@ -800,7 +832,7 @@
       db.history.forEach(function (h) { sum += h.score / (h.total || 100) * 100; cnt++; });
       avg = Math.round(sum / cnt);
     }
-    [['题库总量', ALL.length + ' 题'], ['累计作答', answered + ' 题'],
+    [['题库总量', PAPERS.length + ' 套 · ' + ALL.length + ' 题'], ['累计作答', answered + ' 题'],
      ['历史平均分', avg === null ? '—' : avg], ['错题数量', Object.keys(db.wrong).length + ' 题']].forEach(function (x) {
       var k = cloneTpl('tpl-kpi');
       $('span', k).textContent = x[0];
@@ -816,8 +848,10 @@
     var card = el('article', 'main-card');
 
     var left = el('div', 'mc-left');
-    left.appendChild(el('h3', null, '官方题库'));
-    left.appendChild(el('p', 'mc-meta', st.total + ' 题 · 满分 100 · 含知识点与解析'));
+    left.appendChild(el('h3', null, p.id === 'T' ? '官方题库' : p.title));
+    left.appendChild(el('p', 'mc-meta', p.id === 'T'
+      ? st.total + ' 题 · 官方题库 · 含知识点与解析'
+      : st.total + ' 题 · 预测题 · 每题标注依据'));
     var chips = el('div', 'mc-types');
     [['single', '单选'], ['multi', '多选'], ['judge', '判断']].forEach(function (t) {
       var c = el('span', 'mc-chip');
@@ -855,7 +889,7 @@
     bPrac.addEventListener('click', function () { startPaperAll(p, 'practice'); });
     right.appendChild(bPrac);
     var bMock = el('button', 'btn', '模拟考试');
-    bMock.title = '随机 60 单选 + 10 多选 + 30 判断，限时 90 分钟';
+    bMock.title = '官方卷面 110 题（60 单选 + 10 多选 + 40 判断），限时 90 分钟，按 1/2/0.5 配分';
     bMock.setAttribute('data-act', 'card-mock');
     bMock.addEventListener('click', function () { startMockExam(); });
     right.appendChild(bMock);
@@ -866,9 +900,9 @@
 
     var foot = el('div', 'mc-foot');
     if (st.best !== null) foot.appendChild(el('span', 'mc-best', '最高分 ' + st.best));
-    var rnd = el('button', 'btn btn-sm btn-ghost', '🎲 全库随机');
+    var rnd = el('button', 'btn btn-sm btn-ghost', p.id === 'T' ? '🎲 全库随机' : '🎲 本卷随机');
     rnd.setAttribute('data-act', 'random-exam');
-    rnd.addEventListener('click', function () { startRandomExam(); });
+    rnd.addEventListener('click', function () { startRandomExam(p.id); });
     foot.appendChild(rnd);
     if (st.recent) {
       var r = el('button', 'btn btn-sm btn-ghost mc-resume',
@@ -893,20 +927,46 @@
     head.appendChild(el('span', 'cp-sub', '题号或范围，用「、」分隔'));
     box.appendChild(head);
     var row = el('div', 'custom-row');
+    var sel = el('select', 'custom-paper');
+    sel.id = 'customPaper';
+    sel.title = '从哪一套题库取题';
+    PAPERS.forEach(function (p) {
+      var op = document.createElement('option');
+      op.value = p.id;
+      op.textContent = p.title;
+      sel.appendChild(op);
+    });
+    row.appendChild(sel);
     var inp = el('input');
     inp.id = 'customNos';
     inp.spellcheck = false;
-    inp.placeholder = '例如：1-50、120、850-860、1081';
+    inp.placeholder = '例如：1-50、120、165';
     row.appendChild(inp);
     var btn = el('button', 'btn btn-primary', '开始训练');
     btn.setAttribute('data-act', 'custom-start');
-    btn.addEventListener('click', function () { startCustomSet(inp.value); });
+    btn.addEventListener('click', function () { startCustomSet(inp.value, sel.value); });
     row.appendChild(btn);
     box.appendChild(row);
     inp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); startCustomSet(inp.value); }
+      if (e.key === 'Enter') { e.preventDefault(); startCustomSet(inp.value, sel.value); }
     });
-    box.appendChild(el('p', 'desc', '题号即全局编号：单选 1-849、多选 850-1080、判断 1081-1445，无效题号自动忽略。'));
+    /* 提示文案跟着所选题库走：两套题库的题号段不同，写死会误导 */
+    var desc = el('p', 'desc', '');
+    function paintDesc() {
+      var p = BY_ID[sel.value];
+      if (!p) { desc.textContent = ''; return; }
+      var lo = { single: 0, multi: 0, judge: 0 }, hi = { single: 0, multi: 0, judge: 0 };
+      p.questions.forEach(function (q) {
+        if (!lo[q.t]) lo[q.t] = q.n;
+        hi[q.t] = q.n;
+      });
+      var seg = ['single', 'multi', 'judge'].filter(function (t) { return hi[t]; })
+        .map(function (t) { return typeName(t) + ' ' + lo[t] + '-' + hi[t]; }).join('、');
+      desc.textContent = p.title + '：' + seg + '，无效题号自动忽略。';
+    }
+    sel.addEventListener('change', paintDesc);
+    paintDesc();
+    box.appendChild(desc);
     return box;
   }
 
@@ -942,9 +1002,11 @@
     var L = layout();
     var p = PAPERS[0];
     var st = paperStats(p);
+    var extN = 0;
+    PAPERS.slice(1).forEach(function (pp) { extN += pp.questions.length; });
 
     var nums = $('#h2Nums', node);
-    [['总题量', ALL.length], ['单选', st.byType.single.total], ['多选', st.byType.multi.total], ['判断', st.byType.judge.total]]
+    [['总题量', p.questions.length], ['单选', st.byType.single.total], ['多选', st.byType.multi.total], ['判断', st.byType.judge.total]]
       .forEach(function (x) {
         var d = el('div', 'h2-num');
         d.appendChild(el('b', null, String(x[1])));
@@ -954,27 +1016,31 @@
 
     var note = $('#h2Note', node);
     note.appendChild(el('span', 'h2-note-text',
-      '官方题库已收录 ' + ALL.length + ' 题，答案提取自原文【答案】标注；如有更正可在「答案管理」粘贴覆盖。'));
+      '官方题库 ' + p.questions.length + ' 题，答案提取自原文【答案】标注' +
+      (extN ? '；另配 40% 预测题库 ' + extN + ' 题（自编，每题标注依据）' : '') +
+      '。如有更正可在「答案管理」粘贴覆盖。'));
     var more = el('button', 'h2-note-more', '说明');
     more.addEventListener('click', function () {
       showModal('题库说明',
-        '本题库为 2026 年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛理论题库，共 ' + ALL.length +
+        '【官方题库】2026 年广东省人工智能与机器人技能大赛（人工智能训练师赛项）初赛公布的 1445 题，共 ' + p.questions.length +
         ' 题（单选 ' + st.byType.single.total + ' / 多选 ' + st.byType.multi.total + ' / 判断 ' + st.byType.judge.total +
         '），答案提取自题库原文的【答案】标注，部分题目附知识点与解析。' +
+        (extN ? '【40% 预测题库】官方未公布的 40% 由专家组另出，这里按考纲方向自编 ' + extN +
+          ' 题，每题标注依据（标准条款 / 法规条文 / 教材口径），用于覆盖官方题库没涉及的知识点，与官方题库完全独立、互不影响进度。' : '') +
         '若后续有官方更正，可在「答案管理」中粘贴覆盖，所有成绩与错题会按新答案重算。',
         '知道了', null);
     });
     note.appendChild(more);
 
     var grid = $('#h2Grid', node);
-    var main = buildMainCard(p);
     var tools = buildToolCards();
     var custom = buildCustomBox();
 
     if (L === 'b') {
       var colL = el('div', 'h2-col h2-col-l');
       var colR = el('div', 'h2-col h2-col-r');
-      colL.appendChild(main);
+      /* 一套题库一张卡，两套题库并排（B 布局左列竖排） */
+      PAPERS.forEach(function (pp) { colL.appendChild(buildMainCard(pp)); });
       var cuB = buildClearUndo();
       if (cuB) colL.appendChild(cuB);
       var trB = buildTempResume();
@@ -990,7 +1056,7 @@
       s1.appendChild(el('h2', null, '开始训练'));
       s1.appendChild(el('span', null, '整套训练 / 考试做完全部题，也可按题型专项练'));
       grid.appendChild(s1);
-      grid.appendChild(main);
+      PAPERS.forEach(function (pp) { grid.appendChild(buildMainCard(pp)); });
       var cuA = buildClearUndo();
       if (cuA) grid.appendChild(cuA);
       var trA = buildTempResume();
@@ -1041,30 +1107,54 @@
     return Object.keys(out).map(Number).sort(function (x, y) { return x - y; });
   }
 
-  /* 模拟考试抽题：60 单选 + 10 多选 + 30 判断，按题型顺序拼接 */
+  /* 模拟考试抽题：还原初赛卷面 60 单选 + 10 多选 + 40 判断 = 110 题。
+     题源也照官方规则：60% 来自公开题库、40% 来自预测题库；某卷不够时由另一卷补齐，卷面题量恒定。 */
+  var MOCK_PLAN = [
+    { t: 'single', n: 60, pub: 36 },
+    { t: 'multi', n: 10, pub: 6 },
+    { t: 'judge', n: 40, pub: 24 }
+  ];
   function pickMock() {
-    var by = { single: [], multi: [], judge: [] };
-    ALL.forEach(function (q) { by[q.t].push(q); });
-    shuffle(by.single); shuffle(by.multi); shuffle(by.judge);
-    return by.single.slice(0, 60).concat(by.multi.slice(0, 10), by.judge.slice(0, 30));
+    var byPub = { single: [], multi: [], judge: [] };
+    var byExt = { single: [], multi: [], judge: [] };
+    PAPERS[0].questions.forEach(function (q) { byPub[q.t].push(q); });
+    PAPERS.slice(1).forEach(function (p) {
+      p.questions.forEach(function (q) { byExt[q.t].push(q); });
+    });
+    TYPES.forEach(function (t) { shuffle(byPub[t]); shuffle(byExt[t]); });
+    var out = [];
+    MOCK_PLAN.forEach(function (plan) {
+      var need = plan.n;
+      var a = byPub[plan.t].splice(0, Math.min(plan.pub, need));
+      need -= a.length;
+      var b = byExt[plan.t].splice(0, Math.min(need, byExt[plan.t].length));
+      need -= b.length;
+      if (need > 0) a = a.concat(byPub[plan.t].splice(0, Math.min(need, byPub[plan.t].length)));
+      out = out.concat(a, b);
+    });
+    return out;
   }
 
-  function startRandomExam() {
+  function startRandomExam(pid) {
+    pid = pid || PAPERS[0].id;
     var t = db.temp;
     if (t && t.key === 'random' && t.order && t.order.length && Object.keys(t.answers || {}).length) {
-      showModal('上次全库随机未完成', '检测到中断的全库随机练习（已答 ' + Object.keys(t.answers).length + ' 题）。可「继续做」接着练，或「重新抽题」重新开始。',
+      showModal('上次随机练习未完成', '检测到中断的随机练习（已答 ' + Object.keys(t.answers).length + ' 题）。可「继续做」接着练，或「重新抽题」重新开始。',
         '继续做', function () { resumeTemp(); }, '取消', null,
-        { text: '重新抽题', onClick: newRandom });
+        { text: '重新抽题', onClick: function () { newRandom(pid); } });
       return;
     }
-    newRandom();
+    newRandom(pid);
   }
 
-  function newRandom() {
-    var picks = shuffle(ALL.slice()).map(function (q) {
-      return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o };
+  /* 全库随机：只随机本卷（官方卷 1445 题语义不变；预测卷单独随机自己那 300 题） */
+  function newRandom(pid) {
+    pid = pid || PAPERS[0].id;
+    var pool = (BY_ID[pid] ? BY_ID[pid].questions : ALL).slice();
+    var picks = shuffle(pool).map(function (q) {
+      return { pid: q.pid, n: q.n, key: q.key, t: q.t, q: q.q, o: q.o, kp: q.kp, an: q.an, src: q.src };
     });
-    beginSet(picks, '全库随机练习（' + ALL.length + ' 题）', 'practice', false, true, 'random');
+    beginSet(picks, bankTitle(pid) + ' · 随机练习（' + pool.length + ' 题）', 'practice', false, true, 'random');
   }
 
   /* ---------------- paper modules ---------------- */
@@ -1167,9 +1257,11 @@
     var sheetGrid = $('#sheetGrid', node);
     var sheetChips = [];
     sess.qs.forEach(function (q, i) {
-      var chip = el('button', 'sheet-chip', String(q.n));
+      /* 多卷时非官方卷的格子带卷前缀（S12），否则两卷 #1 在混排里分不清 */
+      var chipTxt = (PAPERS.length > 1 && q.pid !== 'T') ? q.pid + q.n : String(q.n);
+      var chip = el('button', 'sheet-chip', chipTxt);
       chip.type = 'button';
-      chip.title = '#' + q.n + ' ' + typeName(q.t);
+      chip.title = gid(q) + ' ' + typeName(q.t);
       chip.addEventListener('click', function () {
         if (sess.idx === i) return;
         sess.idx = i;
@@ -1223,7 +1315,9 @@
         opts.appendChild(wrap);
       });
       $('#qNo', node).textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
-      $('#qGid', node).textContent = '#' + q.n;
+      $('#qGid', node).textContent = gid(q);
+      var gidEl = $('#qGid', node);
+      if (gidEl) gidEl.classList.toggle('gid-s', q.pid !== 'T');   /* 预测题徽标换色，和官方题一眼区分 */
       $('#qType', node).textContent = typeName(q.t);
       $('#qType', node).className = typeTagClass(q.t);
       $('#qHint', node).textContent = q.t === 'multi' ? '（多选，全对才得分）' : '';
@@ -1557,18 +1651,20 @@
       var a = sess.answers[q.key] || '';
       if (sess.mode !== 'practice' || !a) { box.classList.add('hidden'); return; }
       var c = correctOf(q);
+      /* 预测题带 src（标准条款 / 法规 / 教材口径），官方题没有这个字段，显示完全不受影响 */
+      var srcTxt = q.src ? '　📌 依据：' + q.src : '';
       box.classList.remove('hidden');
       box.className = 'feedback';
       if (!c) {
         box.classList.add('unknown');
         box.textContent = '本题尚未收录参考答案，可在「答案管理」中补充。';
       } else if (a === c) {
-        box.textContent = '✓ 回答正确' + (q.an ? '　📖 ' + q.an : '');
+        box.textContent = '✓ 回答正确' + (q.an ? '　📖 ' + q.an : '') + srcTxt;
       } else {
         box.classList.add('bad');
         var txt = '✗ 回答错误，正确答案：' + c.split('').join(' ');
         if (q.an) txt += '　📖 解析：' + q.an;
-        box.textContent = txt;
+        box.textContent = txt + srcTxt;
       }
     }
 
@@ -1745,13 +1841,22 @@
         else beginSession(pid, mod, mode, { fresh: true, random: false });
       });
     });
-    // 跳转栏：按全局题号（#号，如 #850 或 850）跳转，随机顺序/分类模式下同样有效
+    // 跳转栏：按题号跳转，支持 #850、850、S12（两卷同号时必须带卷前缀才不跳错）
     $('[data-act="jump-no"]', node).addEventListener('click', function () {
       var inp = $('#jumpNo', node);
-      var no = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
-      if (!no) { toast('请输入题号，如 #850'); return; }
-      var i = sess.qs.findIndex(function (x) { return x.n === no; });
-      if (i < 0) { toast('本次练习中没有第 ' + no + ' 题'); return; }
+      var m = /^\s*#?\s*([A-Za-z]*)\s*#?\s*(\d+)\s*$/.exec(String(inp.value || ''));
+      if (!m) { toast('请输入题号，如 850 或 S12'); return; }
+      var pref = (m[1] || '').toUpperCase(), no = parseInt(m[2], 10);
+      var i = -1;
+      for (var k = 0; k < sess.qs.length; k++) {
+        var x = sess.qs[k];
+        if (x.n !== no) continue;
+        if (pref) { if (String(x.pid).toUpperCase() !== pref) continue; }
+        else if (sess.pid && x.pid !== sess.pid) continue;   /* 单卷会话只匹配本卷 */
+        i = k;
+        break;
+      }
+      if (i < 0) { toast('本次练习中没有 ' + (pref ? pref + '#' + no : '第 ' + no + ' 题')); return; }
       sess.idx = i; persistPos(); rebuildQuestion();
       inp.value = '';
     });
@@ -1766,7 +1871,7 @@
       searchKw0 = kw;
       searchHits = [];
       if (kw.length < 2) { drop.classList.add('hidden'); drop.innerHTML = ''; return; }
-      var all = PAPERS[0].questions;   /* 单题库：官方题库全量搜索 */
+      var all = (sess.pid && BY_ID[sess.pid]) ? BY_ID[sess.pid].questions : ALL;   /* 有卷别搜本卷；临时题组搜全部卷 */
       for (var i = 0; i < all.length; i++) {
         var q = all[i];
         var hay = (q.q + ' ' + q.o.join(' ') + ' ' + (q.kp || '') + ' ' + (q.an || '')).toLowerCase();
@@ -1780,7 +1885,7 @@
           var r = el('button', 'search-row');
           r.type = 'button';
           var stem = q.q.replace(/\s+/g, ' ');
-          r.innerHTML = '<b>#' + q.n + '</b><span class="st">' + typeName(q.t) + '</span>' +
+          r.innerHTML = '<b>' + gid(q) + '</b><span class="st">' + typeName(q.t) + '</span>' +
             '<span class="sq">' + escHtml(stem.slice(0, 46)) + (stem.length > 46 ? '…' : '') + '</span>';
           r.addEventListener('click', function () { gotoHit(q); });
           drop.appendChild(r);
@@ -1800,11 +1905,11 @@
         return;
       }
       /* 不在当前练习：把全部匹配题组成一个搜索练习，直接落在该题上（断点可续） */
-      var qs = searchHits.slice().sort(function (a, b) { return a.n - b.n; });
+      var qs = searchHits.slice().sort(byPaperNo);
       var at = qs.findIndex(function (x) { return x.key === q.key; });
       showModal('本题不在本次练习中',
-        '第 ' + q.n + ' 题（' + typeName(q.t) + '）不在当前练习范围。可以把「' + escHtml(searchKw0) + '」匹配到的 <b>' +
-        qs.length + '</b> 道题组成一个搜索练习，直接从第 ' + q.n + ' 题开始做（练习模式，进度自动保存）。',
+        gid(q) + ' 题（' + typeName(q.t) + '）不在当前练习范围。可以把「' + escHtml(searchKw0) + '」匹配到的 <b>' +
+        qs.length + '</b> 道题组成一个搜索练习，直接从 ' + gid(q) + ' 开始做（练习模式，进度自动保存）。',
         '直达该题', function () {
           sess = {
             pid: null, mod: null, title: '搜索：' + searchKw0, mode: 'practice', qs: qs,
@@ -1908,7 +2013,8 @@
       db.history.push({
         pid: s.pid, mod: s.mod || null, mode: s.mode, score: r.score, total: r.total,
         at: Date.now(), used: Math.round(used), random: !!s.random, snap: snap,
-        label: s.title
+        label: s.title,
+        weighted: !!s.weighted   /* 模拟考是 1/2/0.5 配分制，重算历史时要按配分算，不能按题数算 */
       });
       if (db.history.length > 200) db.history = db.history.slice(-200);
       if (s.tempKey) db.temp = null;  /* 交卷后清除断点 */
@@ -1929,7 +2035,7 @@
     var pct = r.total ? r.score / r.total : 0;
 
     $('#scoreVal', node).textContent = String(r.score);
-    $('#scoreOf', node).textContent = '得分 / ' + r.total;
+    $('#scoreOf', node).textContent = '得分 / ' + r.total + (s.weighted ? ' 分' : '');
     $('#resTitle', node).textContent = s.mode === 'exam' ? '交卷完成' : '练习完成';
     var praise = pct >= 0.9 ? '状态非常好，保持手感。' : pct >= 0.75 ? '基础扎实，重点补错题。' : pct >= 0.6 ? '还有提升空间，建议按章节重刷。' : '建议先过一遍错题，再重做本卷。';
     $('#resSub', node).textContent = s.title + ' · 用时 ' + fmtUsed(lastResult.used) + ' · 正确率 ' + Math.round(pct * 100) + '%　' + praise;
@@ -1947,9 +2053,12 @@
 
     var kpis = $('#resKpis', node);
     var kpiList = [['用时', fmtUsed(lastResult.used)]];
+    /* 模拟考按 1 / 2 / 0.5 配分，分题型直接给分数；其余模式仍是"答对题数 / 题数" */
+    function sTxt(x) { return String(Math.round(x * 10) / 10); }
     TYPES.forEach(function (t) {
-      if (r.stat[t][1] > 0) kpiList.push([typeLabel(t), r.stat[t][0] + ' / ' + r.stat[t][1]]);
+      if (r.stat[t][1] > 0) kpiList.push([typeLabel(t), sTxt(r.stat[t][0]) + ' / ' + sTxt(r.stat[t][1]) + (s.weighted ? ' 分' : '')]);
     });
+    if (s.weighted) kpiList.push(['总分', sTxt(r.score) + ' / 100 分']);
     kpiList.forEach(function (x) {
       var k = cloneTpl('tpl-kpi');
       $('span', k).textContent = x[0];
@@ -1973,7 +2082,7 @@
       var c = correctOf(q), a = s.answers[q.key] || '';
       var ok = c && a === c;
       item.classList.toggle('bad', !ok);
-      $('.no', item).textContent = PAPERS.length > 1 ? (q.pid + ' 卷 第 ' + q.n + ' 题') : ('#' + q.n);
+      $('.no', item).textContent = gidFull(q);
       var tag = $('.tag', item);
       tag.textContent = typeName(q.t);
       tag.className = typeTagClass(q.t);
@@ -1983,6 +2092,7 @@
       $('.ro-my span', item).textContent = a ? a.split('').join(' ') : '未作答';
       $('.ro-ck span', item).textContent = c ? c.split('').join(' ') : '—';
       if (q.an) item.appendChild(el('p', 'r-an', '📖 解析：' + q.an));
+      if (q.src) item.appendChild(el('p', 'r-src', '📌 依据：' + q.src));
       return item;
     }
     function paintReview() {
@@ -2039,11 +2149,12 @@
         return '<p style="margin:2px 0 2px 1em">' + L + '．' + escHtml(o) + mark + '</p>';
       }).join('');
       return '<div style="margin:0 0 16px;page-break-inside:avoid">' +
-        '<p style="margin:0"><b>#' + q.n + '（' + typeName(q.t) + '）</b>　' + escHtml(q.q) + '</p>' +
+        '<p style="margin:0"><b>' + gidFull(q) + '（' + typeName(q.t) + '）</b>　' + escHtml(q.q) + '</p>' +
         opts +
         '<p style="margin:4px 0 0;color:green">答案：' + escHtml(c || '—') +
         (q.kp ? '　｜　知识点：' + escHtml(q.kp) : '') + '</p>' +
         (q.an ? '<p style="margin:2px 0 0;color:#555">解析：' + escHtml(q.an) + '</p>' : '') +
+        (q.src ? '<p style="margin:2px 0 0;color:#92400e">依据：' + escHtml(q.src) + '</p>' : '') +
         '</div>';
     }).join('');
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title></head>' +
@@ -2171,7 +2282,7 @@
         var tag = $('.tag', row);
         tag.textContent = typeName(q.t);
         tag.className = typeTagClass(q.t);
-        $('.qtext', row).textContent = (PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n) + ' · ' + q.q;
+        $('.qtext', row).textContent = gidFull(q) + ' · ' + q.q;
         var c = correctOf(q);
         var sub = $('.qsub', row);
         sub.textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
@@ -2195,7 +2306,7 @@
           sub.appendChild(nb);
         }
         $('[data-act="row-go"]', row).addEventListener('click', function () {
-          beginSet([q], PAPERS.length > 1 ? q.pid + ' 卷 第 ' + q.n + ' 题' : '#' + q.n + ' 单题重练', 'practice');
+          beginSet([q], gidFull(q) + ' 单题重练', 'practice');
         });
         $('[data-act="row-del"]', row).addEventListener('click', function () {
           delete map[q.key]; save(); paint();
@@ -2371,7 +2482,7 @@
         row.appendChild(tag);
 
         var grow = el('div', 'grow');
-        grow.appendChild(el('div', 'qtext', '#' + q.n + ' · ' + q.q));
+        grow.appendChild(el('div', 'qtext', gidFull(q) + ' · ' + q.q));
         var txt = el('div', 'qsub note-text', n.t || '');
         if (!n.t) txt.classList.add('hidden');
         grow.appendChild(txt);
@@ -2385,7 +2496,7 @@
 
         var bGo = el('button', 'btn btn-sm btn-ghost', '去答题');
         bGo.addEventListener('click', function () {
-          beginSet([q], '#' + q.n + ' 笔记题重练', 'practice');
+          beginSet([q], gidFull(q) + ' 笔记题重练', 'practice');
         });
         var editing = false, ta = null;
         var bEdit = el('button', 'btn btn-sm btn-ghost', '编辑');
@@ -2411,7 +2522,7 @@
         });
         var bDel = el('button', 'btn btn-sm btn-ghost', '删除');
         bDel.addEventListener('click', function () {
-          showModal('删除这条笔记？', '#' + q.n + ' 的笔记内容将被清空（题目本身不受影响）。', '删除', function () {
+          showModal('删除这条笔记？', gidFull(q) + ' 的笔记内容将被清空（题目本身不受影响）。', '删除', function () {
             delete db.notes[q.key];
             save(); paint();
             toast('笔记已删除');
@@ -2517,12 +2628,12 @@
       var tag = $('.tag', row);
       tag.textContent = typeName(q.t);
       tag.className = typeTagClass(q.t);
-      $('.qtext', row).textContent = q.pid + ' 卷 第 ' + q.n + ' 题 · ' + q.q;
+      $('.qtext', row).textContent = gidFull(q) + ' · ' + q.q;
       var c = correctOf(q);
       $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
       $('[data-act="row-go"]', row).textContent = '重练';
       $('[data-act="row-go"]', row).addEventListener('click', function () {
-        beginSet([q], q.pid + ' 卷 第 ' + q.n + ' 题', 'practice');
+        beginSet([q], gidFull(q), 'practice');
       });
       $('[data-act="row-del"]', row).textContent = '移除';
       $('[data-act="row-del"]', row).addEventListener('click', function () {
@@ -2760,10 +2871,12 @@
       raw.split(/\r?\n/).forEach(function (line) {
         var t = line.trim();
         if (!t) return;
-        var m = t.match(/^(\d{1,4})\s*[\.:：\-]?\s*([A-Ha-h]+)$/) || t.match(/^(\d{1,4})\s+([A-Ha-h\s]+)$/);
+        /* 允许题号带卷前缀（S12 / S#12）；前缀与当前选的卷不符＝无效行，避免把 S 题抄进 T 卷 */
+        var m = t.match(/^([A-Za-z])?#?(\d{1,4})\s*[\.:：\-]?\s*([A-Ha-h]+)$/) || t.match(/^([A-Za-z])?#?(\d{1,4})\s+([A-Ha-h\s]+)$/);
         if (!m) { bad++; return; }
-        var no = parseInt(m[1], 10);
-        var ans = sortedLetters(m[2].replace(/\s/g, ''));
+        if (m[1] && m[1].toUpperCase() !== pid) { bad++; return; }
+        var no = parseInt(m[2], 10);
+        var ans = sortedLetters(m[3].replace(/\s/g, ''));
         var p = BY_ID[pid];
         if (!p || !p.questions.some(function (q) { return q.n === no; })) { bad++; return; }
         if (!ans) { bad++; return; }
@@ -2773,15 +2886,26 @@
       // 按新答案重算有快照的历史记录得分
       var rescored = 0;
       db.history.forEach(function (h) {
-        if (!h.snap || h.pid !== pid) return;
-        var ok = 0, total = 0;
-        Object.keys(h.snap).forEach(function (k) {
+        if (!h.snap) return;
+        var keys = Object.keys(h.snap).filter(function (k) { return /^\w#\d+$/.test(k); });
+        if (!keys.length) return;
+        /* 模拟考快照跨两卷（T 66 + S 44），不能按 h.pid 过滤，按 key 前缀各自取题；
+           只有快照里含本次改的卷才重算，避免无关记录被白改一遍 */
+        if (!keys.some(function (k) { return k.split('#')[0] === pid; })) return;
+        var ok = 0, total = 0, wsum = 0, wtot = 0;
+        keys.forEach(function (k) {
           var m = /^(\w)#(\d+)$/.exec(k);
-          if (!m || m[1] !== pid) return;
-          total++;
-          if (correctOf({ pid: pid, n: parseInt(m[2], 10) }) === h.snap[k]) ok++;
+          var kp = m[1], kn = parseInt(m[2], 10);
+          var qq = QMAP[kp + '#' + kn];
+          var w = qq ? (TYPE_SCORE[qq.t] || 1) : 1;
+          var hit = correctOf({ pid: kp, n: kn }) === h.snap[k];
+          total++; if (hit) ok++;
+          wtot += w; if (hit) wsum += w;
         });
-        if (total) { h.score = ok; h.total = total; rescored++; }
+        /* 模拟考历史是配分制（满分 100），按题数重算会把它拉回 110 分口径 */
+        if (h.weighted) { h.score = round1(wsum); h.total = round1(wtot); }
+        else { h.score = ok; h.total = total; }
+        rescored++;
       });
       save();
       $('#keyStat', node).textContent = '本卷已修改 ' + Object.keys(ov).length + ' 题';
@@ -3004,10 +3128,16 @@
     b.addEventListener('click', function () {
       var nav = b.getAttribute('data-nav');
       if (nav === 'home') {
-        if (route === 'quiz' && sess && Object.keys(sess.answers).length && !sess.done) {
-          showModal('回到首页？', '本次作答进度会保存，稍后可继续。', '回到首页', function () {
-            persistPos(); sess = null; route = 'home'; render();
-          }, '继续答题');
+        if (route === 'quiz' && sess && !sess.done) {
+          /* 一条题都没答也要落断点：模拟考/随机的题组、限时、配分口径全靠 db.temp 才能续上 */
+          persistPos();
+          if (Object.keys(sess.answers).length) {
+            showModal('回到首页？', '本次作答进度会保存，稍后可继续。', '回到首页', function () {
+              sess = null; route = 'home'; render();
+            }, '继续答题');
+            return;
+          }
+          sess = null; route = 'home'; render();
           return;
         }
         sess = null;
