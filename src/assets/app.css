@@ -686,6 +686,23 @@ select{
 .sheet-chip.done.has-note::after{background:#fff;box-shadow:none}
 .sheet-legend .lg-note::before{background:#7c3aed;border-color:#7c3aed;border-radius:50%}
 
+/* ---------- v3.14.0 错题本按题型重练 ---------- */
+.wrong-types{margin:2px 0 16px}
+.wt-head{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;font-size:13px;font-weight:600;
+  color:var(--ink);flex-wrap:wrap}
+.wt-head span{font-weight:400;color:var(--ink-3);font-size:11.5px}
+/* 错题本里的卡比练习页更紧凑，四张一行不占地方 */
+.wrong-types .mod-card{padding:12px 14px;gap:6px}
+.wrong-types .mod-name{font-size:14px}
+.wrong-types .mod-top{flex-wrap:wrap;gap:2px 6px}
+.wrong-types .mod-count{font-size:11.5px}
+.wrong-types .mod-ops .btn{padding:6px 10px;font-size:12.5px}
+@media (max-width:600px){.wrong-types .mod-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+
+/* 答题卡里的题型分隔条：占满整行，不打乱格子 */
+.sheet-seg{grid-column:1/-1;font-size:10.5px;font-weight:600;color:var(--ink-3);
+  letter-spacing:.3px;margin:2px 0 -1px;line-height:1.4}
+
 /* =====================================================================
    v3.13.0 夜间模式（纯黑 OLED）
    ---------------------------------------------------------------
@@ -859,6 +876,10 @@ html[data-theme="dark"] .sheet-legend .lg-ok::before{background:#16a34a;border-c
 html[data-theme="dark"] .sheet-legend .lg-bad::before{background:#dc2626;border-color:#dc2626}
 html[data-theme="dark"] .sheet-legend .lg-done::before{background:#3b82f6;border-color:#3b82f6}
 
+/* v3.14.0 错题本题型卡 / 答题卡分隔 */
+html[data-theme="dark"] .wrong-types .mod-card{background:var(--card);border-color:var(--line)}
+html[data-theme="dark"] .sheet-seg{color:var(--ink-3)}
+
 /* 打印本页时恢复浅色：夜间变量会把纸面刷黑 */
 @media print{
   html[data-theme="dark"]{
@@ -868,4 +889,6 @@ html[data-theme="dark"] .sheet-legend .lg-done::before{background:#3b82f6;border
     background:#fff;
   }
   html[data-theme="dark"] .topbar{background:#fff}
+  /* 四张重练卡属于操作区，打印列表时不要 */
+  .wrong-types{display:none}
 }

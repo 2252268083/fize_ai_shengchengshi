@@ -412,7 +412,7 @@
     enterQuiz(pid, mod, mode, st, ms, list);
   }
 
-  /* opts: {limitSec: 固定时长秒数, weighted: 按官方配分计分} —— 模拟考用，其余调用不传 */
+  /* opts: {limitSec: 固定时长秒数, weighted: 按官方配分计分, mixJump: 临时题组允许题型跳转} */
   function beginSet(qs, title, mode, random, persistOpt, tempKey, opts) {
     opts = opts || {};
     if (random) shuffle(qs);
@@ -423,7 +423,7 @@
       persist: !!persistOpt, tempKey: tempKey || null, startAt: Date.now(), pending: {},
       deadline: mode === 'exam' ? Date.now() + limitSec * 1000 : 0,
       limit: limitSec, done: false, weighted: !!opts.weighted,
-      random: !!random
+      random: !!random, mixJump: !!opts.mixJump
     };
     if (tempKey) { db.temp = null; save(); }  /* 新题组替换旧断点 */
     route = 'quiz';
@@ -1256,10 +1256,22 @@
   function viewQuiz() {
     var node = cloneTpl('tpl-quiz');
     $('#qTitle', node).textContent = sess.title;
-    // 临时题组（全库随机/错题重练等）没有卷别，隐藏分类切换栏
+    /* 临时题组（全库随机/错题重练等）没有卷别：默认整条隐藏跳转栏。
+       错题本「全部题型」重练带 mixJump 且题型≥2 时保留，只留本次题组里存在的题型 */
+    var typeSet = {};
+    sess.qs.forEach(function (q) { typeSet[q.t] = 1; });
+    var typeCount = Object.keys(typeSet).length;
+    var mixJump = !sess.pid && !!sess.mixJump && typeCount > 1;
     if (!sess.pid) {
       var jb = $('.jump-bar', node);
-      if (jb) jb.classList.add('hidden');
+      if (jb && !mixJump) jb.classList.add('hidden');
+      if (jb && mixJump) {
+        $all('.jt', jb).forEach(function (b) {
+          var t = b.getAttribute('data-type');
+          /* 「全部」始终留着（点了回第 1 题），只藏本次题组里没有的题型 */
+          b.classList.toggle('hidden', t !== 'all' && !typeSet[t]);
+        });
+      }
     }
     $('#qModeTag', node).textContent = sess.mode === 'exam' ? '考试模式' : '练习模式';
     var btnOrder = $('#btnOrder', node);
@@ -1296,9 +1308,17 @@
        标记题琥珀色描边，当前题蓝色描边。 */
     var sheetGrid = $('#sheetGrid', node);
     var sheetChips = [];
+    /* 题组里题型 >1 时，答题卡按题型插一条整行小标题，一眼看出三段 */
+    var mixedSheet = ['single', 'multi', 'judge'].filter(function (t) { return typeTotals[t]; }).length > 1;
     sess.qs.forEach(function (q, i) {
       /* 多卷时非官方卷的格子带卷前缀（S12），否则两卷 #1 在混排里分不清 */
       var chipTxt = (PAPERS.length > 1 && q.pid !== 'T') ? q.pid + q.n : String(q.n);
+      if (mixedSheet && (i === 0 || sess.qs[i - 1].t !== q.t)) {
+        /* 分隔元素不进 sheetChips，格子下标仍与 sess.qs 严格对齐 */
+        var seg = el('div', 'sheet-seg', typeName(q.t) + ' ' + typeTotals[q.t]);
+        seg.setAttribute('data-t', q.t);
+        sheetGrid.appendChild(seg);
+      }
       var chip = el('button', 'sheet-chip', chipTxt);
       chip.type = 'button';
       chip.title = gid(q) + ' ' + typeName(q.t);
@@ -1326,9 +1346,10 @@
       noteFlush();       /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
       optNoteFlush();    /* 选项备注同理 */
       var q = cur();
-      // 分类切换栏：当前模块高亮
+      // 分类切换栏：单卷会话高亮当前模块；混合题组会话高亮当前题的题型
       $all('.jt', node).forEach(function (b) {
-        b.classList.toggle('on', b.getAttribute('data-type') === sess.mod);
+        var t = b.getAttribute('data-type');
+        b.classList.toggle('on', sess.pid ? t === sess.mod : t === q.t);
       });
       opts.innerHTML = '';
       q.o.forEach(function (txt, i) {
@@ -1869,11 +1890,24 @@
     $('[data-act="toggle-card"]', node).addEventListener('click', function () {
       $('#sideCard', node).classList.toggle('open');
     });
-    // 分类模式：切换到只练该题型的模块会话（保留已答）；「全部」切回整套
+    // 分类模式：单卷会话切到只练该题型的模块会话（保留已答）；「全部」切回整套
+    // 临时题组（错题本全部题型重练）没有卷别，改为在当前题组内跳到该题型第一题，不重建会话
     $all('[data-act="jump-type"]', node).forEach(function (b) {
       b.addEventListener('click', function () {
-        if (!sess.pid) { toast('本练习不支持题型切换'); return; }
         var mod = b.getAttribute('data-type');
+        if (!sess.pid) {
+          if (!sess.mixJump) { toast('本练习不支持题型切换'); return; }
+          var i = mod === 'all' ? 0 : -1;
+          for (var k = 0; k < sess.qs.length && i < 0; k++) { if (sess.qs[k].t === mod) i = k; }
+          if (i < 0) { toast('本次练习没有该题型'); return; }
+          if (i === sess.idx) return;
+          sess.idx = i;
+          persistPos();
+          rebuildQuestion();
+          window.scrollTo(0, 0);
+          $('#sideCard', node).classList.remove('open');
+          return;
+        }
         var pid = sess.pid, mode = sess.mode;
         var ms = modState(pid, mod);
         persistPos();
@@ -2254,10 +2288,9 @@
       }
       return null;
     }
-    function visibleQs() {
+    /* 场次筛选后的错题（保持 allQs 的 at 升序），列表和题型入口共用 */
+    function srcQs() {
       var arr = allQs();
-      if (filter !== 'all') arr = arr.filter(function (q) { return q.t === filter; });
-      /* 按练习场次筛选：只看某一次练习产生的错题 */
       if (kind === 'wrong' && srcFilter !== 'all') {
         arr = arr.filter(function (q) {
           var o = originOf(q.key);
@@ -2265,6 +2298,22 @@
         });
       }
       return arr;
+    }
+    function visibleQs() {
+      var arr = srcQs();
+      if (filter !== 'all') arr = arr.filter(function (q) { return q.t === filter; });
+      return arr;
+    }
+    /* 题型重练的题组：全部 = 单选→多选→判断三段，各段内仍是 at 升序。
+       只 filter/concat，不 sort、不碰 db，避免污染列表顺序 */
+    function groupQs(t) {
+      var base = srcQs();
+      if (t !== 'all') return base.filter(function (q) { return q.t === t; });
+      var out = [];
+      ['single', 'multi', 'judge'].forEach(function (x) {
+        base.forEach(function (q) { if (q.t === x) out.push(q); });
+      });
+      return out;
     }
     function fmtDate(t) {
       var d = new Date(t || Date.now());
@@ -2298,6 +2347,7 @@
     }
     function paint() {
       body.innerHTML = '';
+      paintTypes();   /* 题数跟随场次筛选变化；练习回顾 tab 里整体隐藏 */
       if (reviewMode) {
         desc.textContent = '按交卷顺序回顾每一次练习的错题（带快照的练习才可回顾）。';
         reviewRows();
@@ -2428,6 +2478,58 @@
       srcSel.addEventListener('change', function () { srcFilter = srcSel.value; paint(); });
       $('.panel', node).insertBefore(srcSel, filterRow);
     }
+
+    /* ---------- 按题型重练：四张卡（单选/多选/判断/全部），与平时练习页同一套 .mod-card ---------- */
+    var typeBlock = null, typeCards = [];
+    if (kind === 'wrong') {
+      typeBlock = el('div', 'wrong-types');
+      var wtHead = el('div', 'wt-head', '按题型重练');
+      wtHead.appendChild(el('span', '', '每组按最早错的排前'));
+      typeBlock.appendChild(wtHead);
+      var typeGrid = el('div', 'mod-grid');
+      [['single', '单选题'], ['multi', '多选题'], ['judge', '判断题'], ['all', '全部题型']]
+        .forEach(function (m) {
+          var card = el('div', 'mod-card');
+          var top = el('div', 'mod-top');
+          top.appendChild(el('span', 'mod-name', m[1]));
+          var cnt = el('span', 'mod-count', '0 题');
+          top.appendChild(cnt);
+          card.appendChild(top);
+          var meta = el('div', 'mod-meta', '');
+          card.appendChild(meta);
+          var ops = el('div', 'mod-ops');
+          var btn = el('button', 'btn btn-primary btn-sm', '开始');
+          btn.type = 'button';
+          btn.setAttribute('data-act', 'wrong-start');
+          btn.setAttribute('data-type', m[0]);
+          btn.addEventListener('click', function () {
+            var qs = groupQs(m[0]);
+            if (!qs.length) { toast('该题型下没有错题'); return; }
+            /* 不传 persistOpt：错题重练本来就不留断点，和「开始重练」一致；
+               mixJump 让混合题组在答题页显示题型跳转（单选题卡进去只有一种题型，仍然按单题型处理） */
+            beginSet(qs, '错题本 · ' + m[1] + '重练（' + qs.length + ' 题）', 'practice',
+              false, false, null, { mixJump: true });
+          });
+          ops.appendChild(btn);
+          card.appendChild(ops);
+          typeGrid.appendChild(card);
+          typeCards.push({ t: m[0], count: cnt, meta: meta, btn: btn });
+        });
+      typeBlock.appendChild(typeGrid);
+    }
+    /* 卡片只建一次，这里只改数字/可用态，避免 paint() 反复绑监听 */
+    function paintTypes() {
+      if (!typeBlock) return;
+      typeBlock.style.display = reviewMode ? 'none' : '';
+      typeCards.forEach(function (c) {
+        var n = groupQs(c.t).length;
+        c.count.textContent = n + ' 题';
+        c.btn.disabled = !n;
+        c.meta.textContent = !n ? '暂无错题'
+          : (c.t === 'all' ? '单选 → 多选 → 判断' : '按最早错的排前');
+      });
+    }
+    if (typeBlock) $('.panel', node).insertBefore(typeBlock, filterRow);
 
     var bStart = $('[data-act="list-practice"]', node);
     bStart.textContent = kind === 'wrong' ? '开始重练' : '⭐ 开始练习（收藏答题区）';
