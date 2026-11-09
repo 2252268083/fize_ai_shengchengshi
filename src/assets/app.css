@@ -703,6 +703,18 @@ select{
 .sheet-seg{grid-column:1/-1;font-size:10.5px;font-weight:600;color:var(--ink-3);
   letter-spacing:.3px;margin:2px 0 -1px;line-height:1.4}
 
+/* ---------- v3.15.0 错题次数 ---------- */
+/* 错了几次的徽标：1-2 次灰、≥3 次红（hot），挂在「参考答案」后面 */
+.cnt-badge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;
+  font-size:11px;line-height:1.65;white-space:nowrap;vertical-align:1px;
+  background:#eef1f7;color:#475569;border:1px solid #e2e8f0}
+.cnt-badge.hot{background:#fee2e2;color:#b91c1c;border-color:#fecaca;font-weight:600}
+/* 排序下拉：靠右贴在同一行，窄屏换行后仍靠右 */
+.filter-row .sort-select{margin-left:auto;padding:4px 9px;font-size:12px;border-radius:999px}
+@media (max-width:420px){
+  .filter-row .sort-select{margin-left:0;width:100%}
+}
+
 /* =====================================================================
    v3.13.0 夜间模式（纯黑 OLED）
    ---------------------------------------------------------------
@@ -880,6 +892,10 @@ html[data-theme="dark"] .sheet-legend .lg-done::before{background:#3b82f6;border
 html[data-theme="dark"] .wrong-types .mod-card{background:var(--card);border-color:var(--line)}
 html[data-theme="dark"] .sheet-seg{color:var(--ink-3)}
 
+/* v3.15.0 错题次数徽标 */
+html[data-theme="dark"] .cnt-badge{background:#1c1c21;color:#cbd5e1;border-color:#2e2e36}
+html[data-theme="dark"] .cnt-badge.hot{background:#3a1416;color:#ffa2a2;border-color:#5b1d20}
+
 /* 打印本页时恢复浅色：夜间变量会把纸面刷黑 */
 @media print{
   html[data-theme="dark"]{
@@ -891,4 +907,6 @@ html[data-theme="dark"] .sheet-seg{color:var(--ink-3)}
   html[data-theme="dark"] .topbar{background:#fff}
   /* 四张重练卡属于操作区，打印列表时不要 */
   .wrong-types{display:none}
+  /* 排序下拉是交互控件，纸上没意义；次数徽标保留（纸上也要看得出哪题老错） */
+  .sort-select{display:none}
 }

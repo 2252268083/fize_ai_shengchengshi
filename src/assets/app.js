@@ -57,6 +57,7 @@
     if (!d || typeof d !== 'object') d = {};
     d.papers = d.papers || {};
     d.wrong = d.wrong || {};
+    d.wrongFixed = d.wrongFixed || {};   /* 已订正的题留的累计次数底账（v3.15.0），不计入错题本 */
     d.fav = d.fav || {};
     d.notes = d.notes || {};     /* 逐题笔记：{'T#123': {t:'正文', at, up}}，随备份导出/导入 */
     d.overrides = d.overrides || {};
@@ -473,7 +474,8 @@
         order: sess.qs.map(function (q) { return q.key; }), idx: sess.idx,
         answers: sess.answers, flags: sess.flags, deadline: sess.deadline || 0,
         random: !!sess.random, at: Date.now(),
-        limit: sess.limit || 0, weighted: !!sess.weighted   /* 断点续做要保住限时与配分口径 */
+        limit: sess.limit || 0, weighted: !!sess.weighted,   /* 断点续做要保住限时与配分口径 */
+        tally: sess.tally || {}   /* 已计过错的题：续做交卷时不再重复加次数 */
       };
       save();
     }
@@ -491,7 +493,7 @@
       idx: Math.min(t.idx || 0, qs.length - 1), st: null, ms: null,
       persist: true, tempKey: t.key, startAt: Date.now(), pending: {},
       deadline: t.deadline || 0, limit: t.limit || examLimit(qs.length), done: false,
-      weighted: !!t.weighted, random: !!t.random
+      weighted: !!t.weighted, random: !!t.random, tally: t.tally || {}
     };
     route = 'quiz';
     render();
@@ -521,11 +523,60 @@
     return { score: round1(score), stat: stat, unknown: unknown, blank: blank, wrong: wrong, total: round1(total) };
   }
 
+  /* ---------------- 错题计数（v3.15.0） ----------------
+     db.wrong[key] = {pid, n, at:首次答错时间, last:最近答错时间, cnt:累计答错次数, src?, srcAt?}
+     老数据没有 cnt，一律按 1 次算（wrongCnt 兜底），不需要迁移。
+     db.wrongFixed[key] = {c:订正前累计错次数, at:订正时间, pid, n}：答对移出错题本时留个底，
+     用于统计「累计错过多少次」，不影响错题本本身。 */
+  function wrongCnt(q) {
+    var w = db.wrong[q.key || q];
+    return w ? (w.cnt || 1) : 0;
+  }
+  /* 错题本里所有题的累计次数之和（不含已订正） */
+  function wrongSum(map) {
+    var s = 0;
+    Object.keys(map || db.wrong).forEach(function (k) {
+      var w = (map || db.wrong)[k];
+      if (w) s += (w.cnt || 1);
+    });
+    return s;
+  }
+  /* 已订正题的累计次数之和 */
+  function fixedSum() {
+    var s = 0;
+    Object.keys(db.wrongFixed || {}).forEach(function (k) { s += (db.wrongFixed[k].c || 0); });
+    return s;
+  }
+  /* 返回该题累计答错次数 */
   function addWrong(q) {
-    if (!db.wrong[q.key]) { db.wrong[q.key] = { pid: q.pid, n: q.n, at: Date.now() }; save(); }
+    var w = db.wrong[q.key];
+    var now = Date.now();
+    if (!w) {
+      db.wrong[q.key] = { pid: q.pid, n: q.n, at: now, last: now, cnt: 1 };
+      if (sess) { sess.tally = sess.tally || {}; sess.tally[q.key] = 1; }
+      save();
+      return 1;
+    }
+    /* 同一场会话同一题只计一次：练习模式是「选错即记」，交卷时还会扫一遍全卷，
+       不去重就会把一次错记成两次。断点续做的会话把 tally 一起存了，退出重进也不会重记。 */
+    if (sess && sess.tally && sess.tally[q.key]) return w.cnt || 1;
+    w.cnt = (w.cnt || 1) + 1;
+    w.last = now;
+    if (sess) { sess.tally = sess.tally || {}; sess.tally[q.key] = 1; }
+    save();
+    return w.cnt;
   }
   function removeWrong(q) {
-    if (db.wrong[q.key]) { delete db.wrong[q.key]; save(); }
+    var w = db.wrong[q.key];
+    if (!w) return;
+    delete db.wrong[q.key];
+    /* 手动移除（错题本行的「移除」按钮）不走这里，所以不会被当成"做对了" */
+    var f = db.wrongFixed[q.key];
+    db.wrongFixed[q.key] = {
+      c: (f ? f.c || 0 : 0) + (w.cnt || 1),
+      at: Date.now(), pid: q.pid, n: q.n
+    };
+    save();
   }
 
   /* ---------------- notes ----------------
@@ -841,7 +892,8 @@
   /* 工具卡：四张。A 布局横排一行，B 布局竖排右栏 */
   function buildToolCards() {
     var wrap = el('div', 'tool-cards');
-    wrap.appendChild(makeMiniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length + ' 道错题', function () {
+    wrap.appendChild(makeMiniCard('📕', 'warn', '错题重练', '已收录 ' + Object.keys(db.wrong).length +
+      ' 道 · 累计错 ' + wrongSum() + ' 次', function () {
       route = 'wrong'; render();
     }));
     wrap.appendChild(makeMiniCard('⭐', 'ok', '我的收藏', '已收藏 ' + Object.keys(db.fav).length + ' 道题', function () {
@@ -873,7 +925,8 @@
       avg = Math.round(sum / cnt);
     }
     [['题库总量', PAPERS.length + ' 套 · ' + ALL.length + ' 题'], ['累计作答', answered + ' 题'],
-     ['历史平均分', avg === null ? '—' : avg], ['错题数量', Object.keys(db.wrong).length + ' 题']].forEach(function (x) {
+     ['历史平均分', avg === null ? '—' : avg],
+     ['错题数量', Object.keys(db.wrong).length + ' 题 / 共错 ' + wrongSum() + ' 次']].forEach(function (x) {
       var k = cloneTpl('tpl-kpi');
       $('span', k).textContent = x[0];
       $('b', k).textContent = x[1];
@@ -1724,6 +1777,9 @@
       } else {
         box.classList.add('bad');
         var txt = '✗ 回答错误，正确答案：' + c.split('').join(' ');
+        /* 第 2 次错起才提示，第一次错不用吓人 */
+        var nw = wrongCnt(q);
+        if (nw >= 2) txt += '　🔁 本题已错 ' + nw + ' 次';
         if (q.an) txt += '　📖 解析：' + q.an;
         box.textContent = txt + srcTxt;
       }
@@ -2267,12 +2323,27 @@
     var filter = 'all';
     var reviewMode = false;
     var srcFilter = 'all';
+    var sortMode = 'time';   /* time=最早错在前（默认）；cnt=错得最多在前；recent=最近错在前 */
 
     function allQs() {
-      /* 错题按加入时间升序：先从最早错的开始重练；收藏保持最新在前 */
-      return Object.keys(map).sort(function (a, b) {
-        return kind === 'wrong' ? (map[a].at || 0) - (map[b].at || 0) : (map[b].at || 0) - (map[a].at || 0);
-      }).map(function (k) { return QMAP[k]; }).filter(Boolean);
+      var keys = Object.keys(map);
+      /* 收藏：最新在前，不受错题排序下拉影响 */
+      if (kind !== 'wrong') {
+        return keys.sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); })
+          .map(function (k) { return QMAP[k]; }).filter(Boolean);
+      }
+      /* 错题：默认 at 升序＝最先错的先练；其余两种按累计次数 / 最近一次 */
+      keys.sort(function (a, b) {
+        var A = map[a] || {}, B = map[b] || {};
+        if (sortMode === 'cnt') {
+          var d = (B.cnt || 1) - (A.cnt || 1);
+          if (d) return d;
+          return (A.at || 0) - (B.at || 0);   /* 同次数时仍是先错的先练 */
+        }
+        if (sortMode === 'recent') return (B.last || B.at || 0) - (A.last || A.at || 0);
+        return (A.at || 0) - (B.at || 0);
+      });
+      return keys.map(function (k) { return QMAP[k]; }).filter(Boolean);
     }
     function sessLabel(h) {
       return h.label || ((h.pid && BY_ID[h.pid] ? BY_ID[h.pid].title : '混合练习') +
@@ -2355,9 +2426,12 @@
       }
       if (kind === 'wrong') {
         var nSrc = Object.keys(db.wrong).filter(function (k) { return db.wrong[k] && db.wrong[k].src; }).length;
-        desc.textContent = '共 ' + allQs().length + ' 道' +
+        var nFix = Object.keys(db.wrongFixed || {}).length;
+        var sumAll = wrongSum() + fixedSum();
+        desc.textContent = '共 ' + allQs().length + ' 道，累计答错 ' + wrongSum(map) + ' 次' +
           (nSrc ? '，其中 ' + nSrc + ' 道来自其他设备的备份' : '') +
-          '。答对后会自动移出；也可手动移除。每次交卷的错题可在上方「练习回顾」按次查看。';
+          '。答对后会自动移出（已订正 ' + nFix + ' 道，共 ' + sumAll + ' 次）；也可手动移除。' +
+          '每次交卷的错题可在上方「练习回顾」按次查看。';
       } else {
         desc.textContent = '共 ' + allQs().length + ' 道。点上方「开始练习」进入收藏答题区，按练习模式作答（答对答错即时反馈）。';
       }
@@ -2376,6 +2450,16 @@
         var c = correctOf(q);
         var sub = $('.qsub', row);
         sub.textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+        /* 累计答错次数：错得越多标得越重，一眼看出哪些是硬骨头 */
+        if (kind === 'wrong') {
+          var cnt = wrongCnt(q);
+          var cw = map[q.key] || {};
+          var cb = el('span', 'cnt-badge' + (cnt >= 3 ? ' hot' : ''), '错 ' + cnt + ' 次');
+          cb.title = '本题累计答错 ' + cnt + ' 次' +
+            (cw.last ? '，最近一次 ' + fmtDate(cw.last) : '') +
+            (cw.at ? '，第一次 ' + fmtDate(cw.at) : '');
+          sub.appendChild(cb);
+        }
         /* 来自备份的错题显示来源标记 */
         if (kind === 'wrong' && map[q.key] && map[q.key].src) {
           sub.appendChild(el('span', 'src-badge', '来自「' + map[q.key].src + '」的备份'));
@@ -2416,6 +2500,27 @@
       filterRow.appendChild(b);
     });
     $('.panel', node).insertBefore(filterRow, body);
+
+    /* 错题排序：列表、题型卡、重练题组三处共用同一个顺序。
+       收藏页不加——收藏本来就是「最新在前」 */
+    if (kind === 'wrong') {
+      var sortSel = document.createElement('select');
+      sortSel.className = 'src-select sort-select';
+      sortSel.title = '错题排序方式（列表、题型卡、重练顺序同步）';
+      [['time', '最早错在前'], ['cnt', '错得最多在前'], ['recent', '最近错在前']]
+        .forEach(function (o) {
+          var op = document.createElement('option');
+          op.value = o[0];
+          op.textContent = o[1];
+          sortSel.appendChild(op);
+        });
+      sortSel.value = sortMode;
+      sortSel.addEventListener('change', function () {
+        sortMode = sortSel.value;
+        paint();
+      });
+      filterRow.appendChild(sortSel);
+    }
 
     if (kind === 'wrong') {
       var tabRow = el('div', 'filter-row');
@@ -2484,7 +2589,8 @@
     if (kind === 'wrong') {
       typeBlock = el('div', 'wrong-types');
       var wtHead = el('div', 'wt-head', '按题型重练');
-      wtHead.appendChild(el('span', '', '每组按最早错的排前'));
+      var wtSort = el('span', '', '每组最早错在前');
+      wtHead.appendChild(wtSort);
       typeBlock.appendChild(wtHead);
       var typeGrid = el('div', 'mod-grid');
       [['single', '单选题'], ['multi', '多选题'], ['judge', '判断题'], ['all', '全部题型']]
@@ -2518,15 +2624,21 @@
       typeBlock.appendChild(typeGrid);
     }
     /* 卡片只建一次，这里只改数字/可用态，避免 paint() 反复绑监听 */
+    var SORT_LABEL = { time: '最早错在前', cnt: '错多在前', recent: '最近错在前' };
     function paintTypes() {
       if (!typeBlock) return;
       typeBlock.style.display = reviewMode ? 'none' : '';
+      if (wtSort) wtSort.textContent = '每组' + SORT_LABEL[sortMode];
       typeCards.forEach(function (c) {
-        var n = groupQs(c.t).length;
+        var list = groupQs(c.t);
+        var n = list.length;
+        var sum = 0;
+        list.forEach(function (q) { sum += wrongCnt(q); });
         c.count.textContent = n + ' 题';
         c.btn.disabled = !n;
         c.meta.textContent = !n ? '暂无错题'
-          : (c.t === 'all' ? '单选 → 多选 → 判断' : '按最早错的排前');
+          : ('累计错 ' + sum + ' 次 · ' +
+            (c.t === 'all' ? '单选 → 多选 → 判断' : SORT_LABEL[sortMode]));
       });
     }
     if (typeBlock) $('.panel', node).insertBefore(typeBlock, filterRow);
@@ -2772,7 +2884,13 @@
       tag.className = typeTagClass(q.t);
       $('.qtext', row).textContent = gidFull(q) + ' · ' + q.q;
       var c = correctOf(q);
-      $('.qsub', row).textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+      var subR = $('.qsub', row);
+      subR.textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+      /* 回顾里也带累计次数：同一次错题里，哪些是反复错的能直接看出来 */
+      var cntR = wrongCnt(q);
+      if (cntR) {
+        subR.appendChild(el('span', 'cnt-badge' + (cntR >= 3 ? ' hot' : ''), '错 ' + cntR + ' 次'));
+      }
       $('[data-act="row-go"]', row).textContent = '重练';
       $('[data-act="row-go"]', row).addEventListener('click', function () {
         beginSet([q], gidFull(q), 'practice');
@@ -3129,7 +3247,12 @@
               Object.keys(bw).forEach(function (k) {
                 if (!db.wrong[k]) {
                   var e = bw[k] || {};
-                  db.wrong[k] = { pid: e.pid, n: e.n, at: e.at || Date.now(), src: srcName, srcAt: pack.exportedAt || 0 };
+                  /* cnt/last 一起带过来：合并后的错题次数是两台设备加起来看，不重置成 1 */
+                  db.wrong[k] = {
+                    pid: e.pid, n: e.n, at: e.at || Date.now(),
+                    cnt: e.cnt || 1, last: e.last || e.at || Date.now(),
+                    src: srcName, srcAt: pack.exportedAt || 0
+                  };
                   added++;
                 }
               });
@@ -3145,8 +3268,15 @@
                 if (!mergedNotes[k]) noteIn++;
                 mergedNotes[k] = e;
               });
+              /* 已订正次数底账：本机与备份同题取较大值（两台各错 1 次算 1 次，不虚增） */
+              var mergedFixed = db.wrongFixed || {};
+              Object.keys(d.wrongFixed || {}).forEach(function (k) {
+                var bk = d.wrongFixed[k], mk = mergedFixed[k];
+                if (bk && (!mk || (bk.c || 0) > (mk.c || 0))) mergedFixed[k] = bk;
+              });
               db = {
                 papers: d.papers || {}, wrong: db.wrong, fav: d.fav || {},
+                wrongFixed: mergedFixed,
                 notes: mergedNotes,
                 overrides: d.overrides || {}, history: d.history || [], settings: st
               };
@@ -3179,7 +3309,7 @@
     });
     $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
       showModal('重置全部进度？', '将清空题库的作答记录、错题本、收藏、笔记与历史成绩（答案修改也会清除）。', '全部清空', function () {
-        db.papers = {}; db.wrong = {}; db.fav = {}; db.notes = {}; db.history = []; db.overrides = {};
+        db.papers = {}; db.wrong = {}; db.wrongFixed = {}; db.fav = {}; db.notes = {}; db.history = []; db.overrides = {};
         save(); lastResult = null; refresh(); toast('已重置');
       });
     });
