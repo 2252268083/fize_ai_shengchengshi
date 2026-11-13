@@ -986,9 +986,19 @@
 
     var left = el('div', 'mc-left');
     left.appendChild(el('h3', null, p.id === 'T' ? '官方题库' : p.title));
-    left.appendChild(el('p', 'mc-meta', p.id === 'T'
-      ? st.total + ' 题 · 官方题库 · 含知识点与解析'
-      : st.total + ' 题 · 预测题 · 每题标注依据'));
+    /* v3.23.0 副标题按卷给：之前除 T 卷外一律写「预测题」，A/W/V/U/X/Y/Z 全被错标 */
+    var META = {
+      T: '官方题库 · 含知识点与解析',
+      S: '预测题库 · 每题标注依据',
+      A: '进阶卷 · 考纲内拔高',
+      W: '错题强化 · 按你错过的题重排',
+      V: '薄弱点模拟 · 反复错专练',
+      U: '冲刺薄弱 · 高阶错题 + 多选专项',
+      X: '错题总攻 · 六份清单合并去重',
+      Y: '多选专攻 · 全卷只有多选',
+      Z: '真实练习记录 · 按危险度排序'
+    };
+    left.appendChild(el('p', 'mc-meta', st.total + ' 题 · ' + (META[p.id] || '自编题库 · 每题带解析')));
     var chips = el('div', 'mc-types');
     [['single', '单选'], ['multi', '多选'], ['judge', '判断']].forEach(function (t) {
       var c = el('span', 'mc-chip');
