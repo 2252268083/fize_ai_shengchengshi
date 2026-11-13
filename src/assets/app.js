@@ -363,6 +363,20 @@
     render();
   }
 
+  /* v3.20.0 order → 题对象列表：order 里可能含插队产生的重复 key，
+     第二次及以后出现的克隆成 isRepeat 实例（否则同一引用无法区分原位/重练两次作答） */
+  function orderToList(order) {
+    var list = [], seenK = {};
+    (order || []).forEach(function (k) {
+      var q = QMAP[k];
+      if (!q) return;
+      if (seenK[k]) q = Object.assign({}, q, { isRepeat: true });
+      else seenK[k] = 1;
+      list.push(q);
+    });
+    return list;
+  }
+
   function beginSession(pid, mod, mode, cfg) {
     var p = BY_ID[pid];
     var st = pstate(pid);
@@ -395,7 +409,7 @@
           '重新计时继续', function () {
             ms.deadline = Date.now() + examLimit(ms.total || ms.order.length) * 1000;
             ms.mode = mode;
-            var list = ms.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+            var list = orderToList(ms.order);
             enterQuiz(pid, mod, mode, st, ms, list);
           }, '重做本卷', function () {
             clearModuleAnswers(p, mod);
@@ -404,7 +418,7 @@
         return;
       }
     }
-    var list = ms.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+    var list = orderToList(ms.order);
     if (!list.length) {
       list = moduleQuestions(p, mod);
       ms.order = list.map(function (q) { return q.key; });
@@ -475,7 +489,8 @@
         answers: sess.answers, flags: sess.flags, deadline: sess.deadline || 0,
         random: !!sess.random, at: Date.now(),
         limit: sess.limit || 0, weighted: !!sess.weighted,   /* 断点续做要保住限时与配分口径 */
-        tally: sess.tally || {}   /* 已计过错的题：续做交卷时不再重复加次数 */
+        tally: sess.tally || {},   /* 已计过错的题：续做交卷时不再重复加次数 */
+        repeats: sess.repeats || {}   /* v3.20.0 插队计数：续做后同一道题仍最多再插 3 次 */
       };
       save();
     }
@@ -485,7 +500,15 @@
   function resumeTemp() {
     var t = db.temp;
     if (!t || !t.order || !t.order.length) { toast('没有可恢复的练习'); return; }
-    var qs = t.order.map(function (k) { return QMAP[k]; }).filter(Boolean);
+    /* order 里可能有插队产生的重复 key：第二次及以后出现的是重练实例，克隆并标记 */
+    var qs = [], seenK = {};
+    t.order.forEach(function (k) {
+      var q = QMAP[k];
+      if (!q) return;
+      if (seenK[k]) q = Object.assign({}, q, { isRepeat: true });
+      else seenK[k] = 1;
+      qs.push(q);
+    });
     if (!qs.length) { db.temp = null; save(); toast('题目已失效，请重新开始'); return; }
     sess = {
       pid: null, mod: null, title: t.title, mode: t.mode || 'practice', qs: qs,
@@ -493,7 +516,8 @@
       idx: Math.min(t.idx || 0, qs.length - 1), st: null, ms: null,
       persist: true, tempKey: t.key, startAt: Date.now(), pending: {},
       deadline: t.deadline || 0, limit: t.limit || examLimit(qs.length), done: false,
-      weighted: !!t.weighted, random: !!t.random, tally: t.tally || {}
+      weighted: !!t.weighted, random: !!t.random, tally: t.tally || {},
+      repeats: t.repeats || {}   /* v3.20.0 插队计数续上 */
     };
     route = 'quiz';
     render();
@@ -511,7 +535,11 @@
     var W = s.weighted ? TYPE_SCORE : null;
     var stat = { single: [0, 0], multi: [0, 0], judge: [0, 0] };
     var score = 0, total = 0, unknown = 0, blank = 0, wrong = [];
+    /* v3.20.0 错题插队后同一题可能出现多次：统计按 key 去重，以最后一次作答为准 */
+    var seenK = {};
     s.qs.forEach(function (q) {
+      if (seenK[q.key]) return;
+      seenK[q.key] = 1;
       var w = W ? (W[q.t] || 1) : 1;
       var c = correctOf(q), a = s.answers[q.key] || '';
       total += w;
@@ -555,6 +583,8 @@
       db.wrong[q.key] = { pid: q.pid, n: q.n, at: now, last: now, cnt: 1 };
       if (sess) { sess.tally = sess.tally || {}; sess.tally[q.key] = 1; }
       save();
+      /* v3.16.0 练习中即时判错后，顶栏「错题本(N)」要跟着 +1，不能等切页面才更新 */
+      paintNav();
       return 1;
     }
     /* 同一场会话同一题只计一次：练习模式是「选错即记」，交卷时还会扫一遍全卷，
@@ -564,6 +594,7 @@
     w.last = now;
     if (sess) { sess.tally = sess.tally || {}; sess.tally[q.key] = 1; }
     save();
+    paintNav();   /* v3.16.0 同上：重复答错次数变化也实时反映到顶栏 */
     return w.cnt;
   }
   function removeWrong(q) {
@@ -577,6 +608,7 @@
       at: Date.now(), pid: q.pid, n: q.n
     };
     save();
+    paintNav();   /* v3.16.0 答对移出错题本时顶栏计数同步 -1 */
   }
 
   /* ---------------- notes ----------------
@@ -601,6 +633,15 @@
     if (!n) return false;
     if (n.t) return true;
     return !!(n.o && Object.keys(n.o).length);
+  }
+  /* v3.18.0 原卷笔记兜底：W 卷（错题强化卷）的题是 T/S 卷的副本，笔记存在原卷 key 下
+     （T#14、S#270）。本卷没笔记时按 q.from 回查原卷，只读展示 + 一键导入，
+     解决「同考点巩固的题笔记本里明明写过，进 W 卷看却是空的」。 */
+  function srcNoteOf(q) {
+    if (!q || !q.from) return null;
+    if (db.notes[q.key]) return null;          /* 本卷已有笔记（哪怕是空壳）就不冒充 */
+    var n = db.notes[q.from];
+    return (n && n.t) ? n : null;
   }
   function noteCount() {
     return Object.keys(db.notes).filter(function (k) { return noteHasContent(db.notes[k]); }).length;
@@ -1362,31 +1403,44 @@
     var sheetGrid = $('#sheetGrid', node);
     var sheetChips = [];
     /* 题组里题型 >1 时，答题卡按题型插一条整行小标题，一眼看出三段 */
+    /* v3.20.0 答错插队会往 sess.qs 里加题，格子与分段标题必须能整体重建 */
     var mixedSheet = ['single', 'multi', 'judge'].filter(function (t) { return typeTotals[t]; }).length > 1;
-    sess.qs.forEach(function (q, i) {
-      /* 多卷时非官方卷的格子带卷前缀（S12），否则两卷 #1 在混排里分不清 */
-      var chipTxt = (PAPERS.length > 1 && q.pid !== 'T') ? q.pid + q.n : String(q.n);
-      if (mixedSheet && (i === 0 || sess.qs[i - 1].t !== q.t)) {
-        /* 分隔元素不进 sheetChips，格子下标仍与 sess.qs 严格对齐 */
-        var seg = el('div', 'sheet-seg', typeName(q.t) + ' ' + typeTotals[q.t]);
-        seg.setAttribute('data-t', q.t);
-        sheetGrid.appendChild(seg);
-      }
-      var chip = el('button', 'sheet-chip', chipTxt);
-      chip.type = 'button';
-      chip.title = gid(q) + ' ' + typeName(q.t);
-      chip.addEventListener('click', function () {
-        if (sess.idx === i) return;
-        sess.idx = i;
-        persistPos();
-        rebuildQuestion();
-        window.scrollTo(0, 0);
-        /* 手机端答题卡是抽屉，跳完就收起露出题目 */
-        $('#sideCard', node).classList.remove('open');
+    function buildSheet() {
+      /* 插题后题量变了：题型总数、分段标题、格子全部按最新 sess.qs 重算 */
+      typeTotals = { single: 0, multi: 0, judge: 0 };
+      sess.qs.forEach(function (q) { typeTotals[q.t]++; });
+      mixedSheet = ['single', 'multi', 'judge'].filter(function (t) { return typeTotals[t]; }).length > 1;
+      sheetGrid.innerHTML = '';
+      sheetChips.length = 0;
+      sess.qs.forEach(function (q, i) {
+        /* 多卷时非官方卷的格子带卷前缀（S12），否则两卷 #1 在混排里分不清 */
+        var chipTxt = (PAPERS.length > 1 && q.pid !== 'T') ? q.pid + q.n : String(q.n);
+        if (mixedSheet && (i === 0 || sess.qs[i - 1].t !== q.t)) {
+          /* 分隔元素不进 sheetChips，格子下标仍与 sess.qs 严格对齐 */
+          var seg = el('div', 'sheet-seg', typeName(q.t) + ' ' + typeTotals[q.t]);
+          seg.setAttribute('data-t', q.t);
+          sheetGrid.appendChild(seg);
+        }
+        var chip = el('button', 'sheet-chip', chipTxt);
+        chip.type = 'button';
+        chip.title = gid(q) + ' ' + typeName(q.t) + (q.isRepeat ? '（错题重练）' : '');
+        chip.addEventListener('click', function () {
+          /* v3.20.0 不再捕获建卡时的下标：插队会让下标漂移；且重练实例与原题同 key，
+             必须按对象身份定位才不会跳到原题位置 */
+          var now = sess.qs.indexOf(q);
+          if (now < 0 || sess.idx === now) return;
+          sess.idx = now;
+          persistPos();
+          rebuildQuestion();
+          window.scrollTo(0, 0);
+          /* 手机端答题卡是抽屉，跳完就收起露出题目 */
+          $('#sideCard', node).classList.remove('open');
+        });
+        sheetGrid.appendChild(chip);
+        sheetChips.push(chip);
       });
-      sheetGrid.appendChild(chip);
-      sheetChips.push(chip);
-    });
+    }
+    buildSheet();
     if (sess.mode !== 'practice') {
       /* 考试模式交卷前看不到对错：图例里去掉「对/错」两项 */
       var lgOk = sheetGrid.parentNode.querySelector('.lg-ok');
@@ -1399,6 +1453,15 @@
       noteFlush();       /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
       optNoteFlush();    /* 选项备注同理 */
       var q = cur();
+      /* v3.20.0 插队重练的题第一次翻到时：自动清掉上次的错答案，给一次干净的重新作答。
+         答案按题 key 存（重练与原位共享一条记录），所以清掉后以重练的新作答为准——
+         这也正是练习的计分口径：这道题最终算你重练时答的。 */
+      if (sess.mode === 'practice' && q.isRepeat && !q.cleared) {
+        q.cleared = true;
+        delete sess.answers[q.key];
+        if (sess.pending) delete sess.pending[q.key];
+        if (sess.persist) save();
+      }
       // 分类切换栏：单卷会话高亮当前模块；混合题组会话高亮当前题的题型
       $all('.jt', node).forEach(function (b) {
         var t = b.getAttribute('data-type');
@@ -1473,13 +1536,39 @@
       var answered = !!sess.answers[q.key];
       var reveal = answered || noteRevealed[q.key] || sameEdit || !!open;
       var oc = Object.keys(optNotesOf(q)).length;   /* 选项备注条数 */
-      view.textContent = (n && reveal) ? n.t : '';
-      view.classList.toggle('hidden', !n || !reveal);
-      box.classList.toggle('has-note', !!n || oc > 0);
+      var sn = srcNoteOf(q);                        /* 原卷笔记（W 卷兜底） */
+      view.innerHTML = '';
+      if (n) {
+        view.textContent = reveal ? n.t : '';
+      } else if (sn) {
+        /* 原卷笔记只读卡片：本卷不自动复制，用户点「导入到本题」才落成 W#x 的笔记
+           （复制了才能编辑，不复制则跟着原卷更新，两种用法都留着） */
+        var wrap = document.createElement('div');
+        wrap.className = 'note-from';
+        var hd = document.createElement('div');
+        hd.className = 'note-from-h';
+        hd.textContent = '📌 原卷 ' + q.from + ' 的笔记';
+        wrap.appendChild(hd);
+        var bd = document.createElement('div');
+        bd.className = 'note-from-b';
+        bd.textContent = reveal ? sn.t : '作答后显示（先别剧透）';
+        if (!reveal) bd.classList.add('muted');
+        wrap.appendChild(bd);
+        if (reveal) {
+          var ib = document.createElement('button');
+          ib.className = 'btn btn-sm btn-ghost';
+          ib.setAttribute('data-act', 'note-import');
+          ib.textContent = '导入到本题';
+          wrap.appendChild(ib);
+        }
+        view.appendChild(wrap);
+      }
+      view.classList.toggle('hidden', !((n && reveal) || !!sn));
+      box.classList.toggle('has-note', !!n || oc > 0 || !!sn);
       badge.textContent = n ? ('已记 · ' + noteTime(n.up || n.at) + (oc ? ' · 选项备注 ' + oc + ' 条' : ''))
-        : (oc ? ('选项备注 ' + oc + ' 条') : '');
+        : (sn ? ('原卷 ' + q.from + ' 有笔记') : (oc ? ('选项备注 ' + oc + ' 条') : ''));
       btn.textContent = n ? '编辑' : '写笔记';
-      if (viewBtn) viewBtn.classList.toggle('hidden', !(n || oc) || reveal);
+      if (viewBtn) viewBtn.classList.toggle('hidden', !(n || oc || sn) || reveal);
       if (!sameEdit) ta.value = n ? n.t : '';
       box.classList.toggle('editing', sameEdit ? true : !!open);
     }
@@ -1504,11 +1593,12 @@
     /* 题卡角标：整题笔记时间 + 选项备注条数 */
     function paintNoteMeta() {
       var q = cur(), n = noteOf(q), oc = Object.keys(optNotesOf(q)).length;
+      var sn = srcNoteOf(q);   /* v3.18.0 原卷笔记也算"有内容"，否则角标会被这里刷空 */
       var badge = $('#noteBadge', node), box = $('#qNote', node);
       if (badge) badge.textContent = n
         ? ('已记 · ' + noteTime(n.up || n.at) + (oc ? ' · 选项备注 ' + oc + ' 条' : ''))
-        : (oc ? ('选项备注 ' + oc + ' 条') : '');
-      if (box) box.classList.toggle('has-note', !!n || oc > 0);
+        : (sn ? ('原卷 ' + q.from + ' 有笔记') : (oc ? ('选项备注 ' + oc + ' 条') : ''));
+      if (box) box.classList.toggle('has-note', !!n || oc > 0 || !!sn);
     }
     function paintOptNotes() {
       var q = cur(), dict = optNotesOf(q);
@@ -1593,6 +1683,9 @@
       var nowTxt = String(ta.value == null ? '' : ta.value).replace(/\s+$/, '');
       if (keep && nowTxt !== prevTxt) noteRevealed[q.key] = true;
       if (had !== keep) paintCard();   /* 答题卡紫点 / 「有笔记」计数同步 */
+      /* v3.18.0 本题没写笔记但原卷有：交回 paintNote 重建原卷卡片，
+         否则下面这段手工重绘会把它清成空白（"笔记又没了"的复现路径之一） */
+      if (!noteOf(q) && srcNoteOf(q)) { paintNote(false); return had !== keep; }
       var badge = $('#noteBadge', node), btn = $('#btnNoteToggle', node);
       var n = noteOf(q), oc = Object.keys(optNotesOf(q)).length;
       if (badge) badge.textContent = n
@@ -1649,13 +1742,46 @@
     function maybeAutoSubmit() {
       if (!sess || sess.mode !== 'practice' || sess.done) return;
       if (sess.idx !== sess.qs.length - 1) return;
-      var unanswered = sess.qs.filter(function (q) { return !sess.answers[q.key]; }).length;
+      /* v3.20.0 插队重复实例按 key 去重，未答数不翻倍 */
+      var seenK = {}, unanswered = 0;
+      sess.qs.forEach(function (q) {
+        if (seenK[q.key]) return;
+        seenK[q.key] = 1;
+        if (!sess.answers[q.key]) unanswered++;
+      });
       if (!unanswered) {
         if (sess.qs.length > 1) confirmSubmit();
         else toast('已答完，点「交卷」查看成绩');
       } else {
         toast('已是最后一题，还有 ' + unanswered + ' 题未作答，可点「交卷」结束（未答按错处理）');
       }
+    }
+
+    /* v3.20.0 错题插队：练习中答错的题随机插到本次练习的后面再来一遍，做对为止。
+       - 只在练习模式生效（考试不插：考卷题量与计分口径不能变）
+       - 同一道题一场最多插 3 次（sess.repeats 计数），防止一直错一直插刷不完
+       - 后面已经排了这道题的等待重练时不再重复插
+       - 插入的是题的浅拷贝（isRepeat 标记）：第一次翻到它时自动清掉上次的错答案，
+         让你重新选；错题本/笔记/收藏照常按原 key 走，答对即从错题本移出 */
+    function queueWrongRepeat(q) {
+      if (!sess || sess.mode !== 'practice' || sess.done) return;
+      sess.repeats = sess.repeats || {};
+      var n = sess.repeats[q.key] || 0;
+      if (n >= 3) return;
+      for (var k = sess.idx + 1; k < sess.qs.length; k++) {
+        if (sess.qs[k].key === q.key) return;   /* 已有待重练的实例 */
+      }
+      var lo = Math.min(sess.idx + 2, sess.qs.length);   /* 至少隔一题再出现 */
+      var pos = lo + Math.floor(Math.random() * (sess.qs.length + 1 - lo));
+      sess.qs.splice(pos, 0, Object.assign({}, q, { isRepeat: true }));
+      sess.repeats[q.key] = n + 1;
+      if (sess.persist && sess.ms) { sess.ms.order = sess.qs.map(function (x) { return x.key; }); }
+      persistPos();   /* 中途刷新/离开：插队结果随断点一起存 */
+      buildSheet();   /* 格子与分段标题按新题量重建 */
+      paintCard();
+      var qn = $('#qNo', node);   /* 「第 x / N 题」的总数也要跟着变 */
+      if (qn) qn.textContent = '第 ' + (sess.idx + 1) + ' / ' + sess.qs.length + ' 题';
+      toast('🔁 答错了——这道题已排到后面第 ' + (pos + 1) + ' 题，稍后再来一遍');
     }
 
     function choose(i) {
@@ -1697,7 +1823,7 @@
         if (c && L === c) {
           removeWrong(q);
           if (autoNext()) return; // 答对自动下一题
-        } else if (c) { addWrong(q); noteOnWrong(q); }
+        } else if (c) { addWrong(q); noteOnWrong(q); queueWrongRepeat(q); }
         maybeAutoSubmit();  // 最后一题答完自动引导交卷
       }
       paintOptions();
@@ -1788,7 +1914,11 @@
     function paintCard() {
       var done = 0, flag = 0, noted = 0;
       var byT = { single: 0, multi: 0, judge: 0 };
+      /* v3.20.0 插队后同一题出现多次：计数按 key 去重，不然已答数会翻倍 */
+      var seenK = {};
       sess.qs.forEach(function (q) {
+        if (seenK[q.key]) return;
+        seenK[q.key] = 1;
         var d = !!sess.answers[q.key];
         if (d) { done++; byT[q.t]++; }
         if (sess.flags[q.key]) flag++;
@@ -1875,6 +2005,25 @@
         paintNote(false);
         paintOptNotes();                  /* 选项备注蓝条一起亮出（手机端靠这个入口看备注） */
       });
+      /* v3.18.0 原卷笔记「导入到本题」：委托绑定（view 的内容每次重绘都会重建） */
+      var nv = $('#noteView', node);
+      if (nv) nv.addEventListener('click', function (e) {
+        var t = e.target;
+        while (t && t !== nv && (!t.getAttribute || t.getAttribute('data-act') !== 'note-import')) t = t.parentNode;
+        if (!t || t === nv) return;
+        var q0 = cur(), s0 = srcNoteOf(q0);
+        if (!s0) return;
+        var rec = db.notes[q0.key] || {};
+        rec.pid = q0.pid; rec.n = q0.n;
+        rec.t = s0.t;
+        rec.at = rec.at || s0.at || Date.now();
+        rec.up = Date.now();
+        db.notes[q0.key] = rec;
+        save();
+        paintNote(false);
+        paintCard();     /* 答题卡紫点 / 「有笔记」计数同步 */
+        toast('已导入原卷 ' + q0.from + ' 的笔记，可继续编辑');
+      });
       $('#btnNoteToggle', node).addEventListener('click', function () {
         var willOpen = !noteBox.classList.contains('editing');
         if (!willOpen) noteFlush();          /* 收起＝保存 */
@@ -1938,7 +2087,7 @@
       if (c && v === c) {
         removeWrong(q);
         if (autoNext()) return; // 多选确认后答对自动下一题
-      } else if (c) { addWrong(q); noteOnWrong(q); }
+      } else if (c) { addWrong(q); noteOnWrong(q); queueWrongRepeat(q); }
       paintOptions(); paintCard(); paintFeedback();
       paintNote(false); paintOptNotes();   /* 已作答：笔记切到可见 */
       maybeAutoSubmit();  // 最后一题答完自动引导交卷
@@ -2484,6 +2633,7 @@
         });
         $('[data-act="row-del"]', row).addEventListener('click', function () {
           delete map[q.key]; save(); paint();
+          paintNav();   /* v3.16.0 这份列表也能移出错题本，顶栏计数同步 */
         });
         body.appendChild(row);
       });
@@ -2897,7 +3047,7 @@
       });
       $('[data-act="row-del"]', row).textContent = '移除';
       $('[data-act="row-del"]', row).addEventListener('click', function () {
-        if (db.wrong[k]) { delete db.wrong[k]; save(); }
+        if (db.wrong[k]) { delete db.wrong[k]; save(); paintNav(); }   /* v3.16.0 顶栏计数同步 */
         toast('已移出错题本');
       });
       body.appendChild(row);
@@ -3355,7 +3505,8 @@
     /* 弹窗（交卷确认、三选弹窗等）打开时不响应选项快捷键 */
     if ($('.modal-mask')) return;
     var k = String(e.key || '').toUpperCase();
-    /* v3.11.3 数字键 1–9 选选项：多选题按同一个数字＝取消勾选该选项（走 choose 的 pending 切换），
+    /* v3.16.0 改版：字母键不再选选项（误触率高），改为 W/S、A/D 翻题；
+       选项只认数字键 1–9：多选题按同一个数字＝取消勾选该选项（走 choose 的 pending 切换），
        按到不存在的选项序号直接忽略——不 preventDefault、不弹提示，等于没按 */
     if (k.length === 1 && k >= '1' && k <= '9') {
       var qi = k.charCodeAt(0) - 49;
@@ -3364,22 +3515,24 @@
       e.preventDefault();
       var dbts = $all('#qOpts .opt');
       if (dbts[qi]) dbts[qi].click();
-    } else if (k.length === 1 && 'ABCDEFGH'.indexOf(k) >= 0) {
-      var q = cur();
-      var i = 'ABCDEFGH'.indexOf(k);
-      if (i < q.o.length) {
-        e.preventDefault();
-        var btns = $all('#qOpts .opt');
-        if (btns[i]) btns[i].click();
-      }
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      var nb = $('[data-act="next"]');
-      if (nb) nb.click();
-    } else if (e.key === 'ArrowLeft') {
+    } else if (k === 'W' || k === 'A') {
+      /* v3.16.0 W/A ＝ 上一题（W=up、A=left 的游戏习惯位） */
       e.preventDefault();
       var pb = $('[data-act="prev"]');
       if (pb) pb.click();
+    } else if (k === 'S' || k === 'D') {
+      /* v3.16.0 S/D ＝ 下一题 */
+      e.preventDefault();
+      var nb = $('[data-act="next"]');
+      if (nb) nb.click();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      var nb2 = $('[data-act="next"]');
+      if (nb2) nb2.click();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      var pb2 = $('[data-act="prev"]');
+      if (pb2) pb2.click();
     } else if (e.key === 'Enter') {
       if ($('.modal-mask')) return;
       /* 多选题勾完按回车＝「确认作答」；已判分的题回车＝下一题 */
@@ -3390,8 +3543,8 @@
          刚判完分顺手回车就误触交卷，练习节奏被打断 */
       var qe = cur();
       if (sess.mode === 'practice' && sess.answers[qe.key]) {
-        var nb2 = $('[data-act="next"]');
-        if (nb2) nb2.click();
+        var nb3 = $('[data-act="next"]');
+        if (nb3) nb3.click();
         return;
       }
       confirmSubmit();

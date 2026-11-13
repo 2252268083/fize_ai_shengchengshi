@@ -371,6 +371,12 @@ select{
 .note-head .spacer{flex:1}
 .note-view{margin-top:8px;font-size:14px;line-height:1.75;color:#1f2937;white-space:pre-wrap;word-break:break-word}
 .note-view.hidden{display:none}
+/* v3.18.0 原卷笔记只读卡片（W 卷：本题没笔记时回查 T/S 卷） */
+.note-from{border-left:3px solid #c7d2fe;background:#f4f7ff;border-radius:0 9px 9px 0;padding:8px 11px}
+.note-from-h{font-size:12px;font-weight:700;color:#4f5bd5;margin-bottom:4px}
+.note-from-b{font-size:13.5px;line-height:1.7;color:#1f2937;white-space:pre-wrap;word-break:break-word}
+.note-from-b.muted{color:var(--ink-3)}
+.note-from .btn{margin-top:8px}
 .note-edit{display:none;margin-top:9px}
 .note-box.editing .note-edit{display:block}
 .note-box.editing .note-view{display:none}
@@ -843,6 +849,10 @@ html[data-theme="dark"] .note-box{background:var(--bg-soft);border-color:#2f2f38
 html[data-theme="dark"] .note-box.has-note{background:#12141c;border-color:#3b4a86}
 html[data-theme="dark"] .note-view,
 html[data-theme="dark"] .note-row .note-text{color:var(--ink)}
+/* v3.18.0 原卷笔记卡片：夜间用深靛底，别用浅色块砸眼 */
+html[data-theme="dark"] .note-from{background:#151a2b;border-left-color:#3b4a86}
+html[data-theme="dark"] .note-from-h{color:#8fa4ff}
+html[data-theme="dark"] .note-from-b{color:var(--ink)}
 html[data-theme="dark"] .note-badge-row,
 html[data-theme="dark"] .opt-note{background:#141a2e;border-color:#27345c;color:#a8bcff}
 html[data-theme="dark"] .opt-note-add{color:#4a5680}
