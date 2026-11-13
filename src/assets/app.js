@@ -554,7 +554,7 @@
   /* ---------------- 错题计数（v3.15.0） ----------------
      db.wrong[key] = {pid, n, at:首次答错时间, last:最近答错时间, cnt:累计答错次数, src?, srcAt?}
      老数据没有 cnt，一律按 1 次算（wrongCnt 兜底），不需要迁移。
-     db.wrongFixed[key] = {c:订正前累计错次数, at:订正时间, pid, n}：答对移出错题本时留个底，
+     db.wrongFixed[key] = {c:订正前累计错次数, at:订正时间, pid, n}：答对时记一笔订正（v3.21.1 起题仍留在错题本），
      用于统计「累计错过多少次」，不影响错题本本身。 */
   function wrongCnt(q) {
     var w = db.wrong[q.key || q];
@@ -597,18 +597,21 @@
     paintNav();   /* v3.16.0 同上：重复答错次数变化也实时反映到顶栏 */
     return w.cnt;
   }
-  function removeWrong(q) {
+  /* v3.21.1 答对不再自动移出错题本：进过本子的题会一直留着，
+     答对只往订正底账（wrongFixed）记一次次数，确认掌握了用错题本行的「移除」手动清。
+     同一场会话同一题只记一次订正（插队重练 + 交卷扫描会重复命中同一题）。 */
+  function correctMark(q) {
     var w = db.wrong[q.key];
-    if (!w) return;
-    delete db.wrong[q.key];
-    /* 手动移除（错题本行的「移除」按钮）不走这里，所以不会被当成"做对了" */
+    if (!w) return;                            /* 不在错题本：答对无事可做 */
+    if (sess && sess.fixed && sess.fixed[q.key]) return;
+    if (sess) { sess.fixed = sess.fixed || {}; sess.fixed[q.key] = 1; }
     var f = db.wrongFixed[q.key];
     db.wrongFixed[q.key] = {
       c: (f ? f.c || 0 : 0) + (w.cnt || 1),
       at: Date.now(), pid: q.pid, n: q.n
     };
     save();
-    paintNav();   /* v3.16.0 答对移出错题本时顶栏计数同步 -1 */
+    /* 顶栏计数不变——题还在错题本里 */
   }
 
   /* ---------------- notes ----------------
@@ -1762,7 +1765,7 @@
        - 同一道题一场最多插 3 次（sess.repeats 计数），防止一直错一直插刷不完
        - 后面已经排了这道题的等待重练时不再重复插
        - 插入的是题的浅拷贝（isRepeat 标记）：第一次翻到它时自动清掉上次的错答案，
-         让你重新选；错题本/笔记/收藏照常按原 key 走，答对即从错题本移出 */
+         让你重新选；错题本/笔记/收藏照常按原 key 走，答对不再移出错题本（v3.21.1，只记订正底账） */
     function queueWrongRepeat(q) {
       if (!sess || sess.mode !== 'practice' || sess.done) return;
       sess.repeats = sess.repeats || {};
@@ -1821,7 +1824,7 @@
       if (sess.mode === 'practice') {
         var c = correctOf(q);
         if (c && L === c) {
-          removeWrong(q);
+          correctMark(q);   /* v3.21.1 答对不移出，只记订正底账 */
           if (autoNext()) return; // 答对自动下一题
         } else if (c) { addWrong(q); noteOnWrong(q); queueWrongRepeat(q); }
         maybeAutoSubmit();  // 最后一题答完自动引导交卷
@@ -2085,7 +2088,7 @@
       }
       setAnswer(q, v);
       if (c && v === c) {
-        removeWrong(q);
+        correctMark(q);   /* v3.21.1 答对不移出，只记订正底账 */
         if (autoNext()) return; // 多选确认后答对自动下一题
       } else if (c) { addWrong(q); noteOnWrong(q); queueWrongRepeat(q); }
       paintOptions(); paintCard(); paintFeedback();
@@ -2284,7 +2287,7 @@
     s.qs.forEach(function (q) {
       var c = correctOf(q), a = s.answers[q.key] || '';
       if (!c || !a) return;
-      if (a === c) removeWrong(q); else addWrong(q);
+      if (a === c) correctMark(q); else addWrong(q);   /* v3.21.1 答对不移出 */
     });
     if (s.persist) {
       var snap = {};
@@ -2579,7 +2582,7 @@
         var sumAll = wrongSum() + fixedSum();
         desc.textContent = '共 ' + allQs().length + ' 道，累计答错 ' + wrongSum(map) + ' 次' +
           (nSrc ? '，其中 ' + nSrc + ' 道来自其他设备的备份' : '') +
-          '。答对后会自动移出（已订正 ' + nFix + ' 道，共 ' + sumAll + ' 次）；也可手动移除。' +
+          '。答对后题会留在错题本并记一次订正（已订正 ' + nFix + ' 道，共 ' + sumAll + ' 次）；确认掌握了可手动移除。' +
           '每次交卷的错题可在上方「练习回顾」按次查看。';
       } else {
         desc.textContent = '共 ' + allQs().length + ' 道。点上方「开始练习」进入收藏答题区，按练习模式作答（答对答错即时反馈）。';
