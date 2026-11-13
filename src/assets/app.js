@@ -58,6 +58,7 @@
     d.papers = d.papers || {};
     d.wrong = d.wrong || {};
     d.wrongFixed = d.wrongFixed || {};   /* 已订正的题留的累计次数底账（v3.15.0），不计入错题本 */
+    d.spot = d.spot || {};       /* v3.24.0 待抽查池：慢答/难题答对也进池，见 SPOT_CFG */
     d.fav = d.fav || {};
     d.notes = d.notes || {};     /* 逐题笔记：{'T#123': {t:'正文', at, up}}，随备份导出/导入 */
     d.overrides = d.overrides || {};
@@ -579,6 +580,8 @@
   function addWrong(q) {
     var w = db.wrong[q.key];
     var now = Date.now();
+    /* v3.24.0 抽查池里的题答错：出池进度清零（答错＝没掌握，重新攒快且对） */
+    if (db.spot && db.spot[q.key]) { db.spot[q.key].pass = 0; db.spot[q.key].last = now; }
     if (!w) {
       db.wrong[q.key] = { pid: q.pid, n: q.n, at: now, last: now, cnt: 1 };
       if (sess) { sess.tally = sess.tally || {}; sess.tally[q.key] = 1; }
@@ -612,6 +615,73 @@
     };
     save();
     /* 顶栏计数不变——题还在错题本里 */
+  }
+
+  /* ---------------- spot 待抽查池（v3.24.0） ----------------
+     目的：不只「答错」才重练——答得慢、难题答对，同样说明掌握不牢，
+     自动进「待抽查」池，之后随机抽出来再考；答得又快又对才出池。
+     db.spot[key] = {pid, n, at:首次进入, last:最近触发, r:{slow:N, hard:N, wrong:N}, pass:连续快且对次数}
+     出池：连续 SPOT_CFG.passNeed 次「答对且用时 ≤ quickMs」自动移出并 toast。
+     配置外置；测试可经 window.__SPOT_CFG 临时改阈值。 */
+  var SPOT_CFG = {
+    slowMs: 15000,     /* 答题超过 15 秒：答对也进抽查——靠现场推导不算记住 */
+    hardStemLen: 90,   /* 题干 ≥90 字算难题：信息量大、容易漏条件 */
+    quickMs: 8000,     /* 8 秒内答对算「快且对」＝真的记住了 */
+    passNeed: 2,       /* 连续 2 次快且对，自动出池 */
+    drawN: 20          /* 每次抽查随机抽的题数 */
+  };
+  window.__SPOT_CFG = SPOT_CFG;   /* 测试/控制台可调：改完立即生效 */
+  /* 难题判定：多选（全库正确率 64.7%，唯一低于 70% 的题型）或长题干 */
+  function isHardQ(q) {
+    return q.t === 'multi' || (q.q && q.q.length >= SPOT_CFG.hardStemLen);
+  }
+  /* 当前题累计用时：切题时 rebuildQuestion 把上一段累进 timeAcc，判定时再加当前段 */
+  function spotTimeOf(q) {
+    var acc = (sess && sess.timeAcc && sess.timeAcc[q.key]) || 0;
+    if (sess && sess.qStartAt && sess.curKey === q.key) acc += Date.now() - sess.qStartAt;
+    return acc;
+  }
+  /* 进池/刷新：reason 'slow' | 'hard' | 'wrong'；返回是否首次进池 */
+  function spotMark(q, reason) {
+    var s = db.spot[q.key], isNew = !s;
+    if (!s) s = db.spot[q.key] = { pid: q.pid, n: q.n, at: Date.now(), r: {}, pass: 0 };
+    s.r[reason] = (s.r[reason] || 0) + 1;
+    s.last = Date.now();
+    s.pass = 0;                /* 触发即清零：要重新攒「连续快且对」 */
+    save(); paintNav();
+    return isNew;
+  }
+  /* 快且对：只有已在池里的题才计数，攒够自动出池 */
+  function spotPass(q) {
+    var s = db.spot[q.key];
+    if (!s) return;
+    s.pass = (s.pass || 0) + 1;
+    if (s.pass >= SPOT_CFG.passNeed) {
+      delete db.spot[q.key];
+      toast('✓ 连续 ' + SPOT_CFG.passNeed + ' 次又快又对，「' + gidFull(q) + '」已移出待抽查');
+    }
+    save(); paintNav();
+  }
+  /* 答对时的抽查判定。mode 'practice' 有逐题计时（慢答判定）；'exam' 只按难题判定。
+     同一场会话同一题只判一次：即时判分 + 交卷扫描会重复命中同一 key。 */
+  function spotOnCorrect(q, mode) {
+    if (sess) {
+      sess.spotSeen = sess.spotSeen || {};
+      if (sess.spotSeen[q.key]) return;
+      sess.spotSeen[q.key] = 1;
+    }
+    var dt = spotTimeOf(q);
+    if (mode === 'practice' && dt > SPOT_CFG.slowMs) {
+      if (spotMark(q, 'slow')) toast('⏱ 本题用时 ' + Math.round(dt / 1000) +
+        ' 秒，已加入「待抽查」——下次抽查再考你');
+      return;
+    }
+    if (isHardQ(q)) {
+      if (spotMark(q, 'hard')) toast('🧩 ' + (q.t === 'multi' ? '多选难题' : '长题干难题') +
+        '已加入「待抽查」');
+      return;
+    }
+    spotPass(q);   /* 不慢也不难：池内题攒出池进度，池外题无事发生 */
   }
 
   /* ---------------- notes ----------------
@@ -731,6 +801,7 @@
     else if (route === 'result') node = viewResult();
     else if (route === 'wrong') node = viewList('wrong');
     else if (route === 'fav') node = viewList('fav');
+    else if (route === 'spot') node = viewSpot();
     else if (route === 'notes') node = viewNotes();
     else if (route === 'review') node = viewReview();
     else if (route === 'history') node = viewHistory();
@@ -756,6 +827,9 @@
     });
     var wc = Object.keys(db.wrong).length;
     document.getElementById('navWrong').textContent = wc ? '(' + wc + ')' : '';
+    var sc = Object.keys(db.spot || {}).length;
+    var sn = document.getElementById('navSpot');
+    if (sn) sn.textContent = sc ? '(' + sc + ')' : '';
     var nc = noteCount();
     var nn = document.getElementById('navNotes');
     if (nn) nn.textContent = nc ? '(' + nc + ')' : '';
@@ -994,7 +1068,7 @@
       W: '错题强化 · 按你错过的题重排',
       V: '薄弱点模拟 · 反复错专练',
       U: '冲刺薄弱 · 高阶错题 + 多选专项',
-      X: '错题总攻 · 六份清单合并去重',
+      X: '错题补漏 · 清单里 Z 卷没覆盖的错题',
       Y: '多选专攻 · 全卷只有多选',
       Z: '真实练习记录 · 按危险度排序'
     };
@@ -1466,6 +1540,17 @@
       noteFlush();       /* 翻题前先把上一题的笔记落库，避免写了没保存就跳走 */
       optNoteFlush();    /* 选项备注同理 */
       var q = cur();
+      /* v3.24.0 逐题计时（抽查判定用）：切到不同的题时，把上一题这段浏览/作答时间
+         累计进 timeAcc，再给当前题起一段新表。同题重绘（清空重选等）不重置，继续累计。 */
+      if (sess.curKey !== q.key) {
+        var nowTk = Date.now();
+        if (sess.curKey && sess.qStartAt) {
+          sess.timeAcc = sess.timeAcc || {};
+          sess.timeAcc[sess.curKey] = (sess.timeAcc[sess.curKey] || 0) + (nowTk - sess.qStartAt);
+        }
+        sess.curKey = q.key;
+        sess.qStartAt = nowTk;
+      }
       /* v3.20.0 插队重练的题第一次翻到时：自动清掉上次的错答案，给一次干净的重新作答。
          答案按题 key 存（重练与原位共享一条记录），所以清掉后以重练的新作答为准——
          这也正是练习的计分口径：这道题最终算你重练时答的。 */
@@ -1835,6 +1920,7 @@
         var c = correctOf(q);
         if (c && L === c) {
           correctMark(q);   /* v3.21.1 答对不移出，只记订正底账 */
+          spotOnCorrect(q, sess.mode);   /* v3.24.0 慢答/难题答对也进抽查池 */
           if (autoNext()) return; // 答对自动下一题
         } else if (c) { addWrong(q); noteOnWrong(q); queueWrongRepeat(q); }
         maybeAutoSubmit();  // 最后一题答完自动引导交卷
@@ -2099,6 +2185,7 @@
       setAnswer(q, v);
       if (c && v === c) {
         correctMark(q);   /* v3.21.1 答对不移出，只记订正底账 */
+        spotOnCorrect(q, sess.mode);   /* v3.24.0 慢答/难题答对也进抽查池 */
         if (autoNext()) return; // 多选确认后答对自动下一题
       } else if (c) { addWrong(q); noteOnWrong(q); queueWrongRepeat(q); }
       paintOptions(); paintCard(); paintFeedback();
@@ -2284,6 +2371,9 @@
 
   function evaluateAndFinish(auto) {
     var s = sess;
+    /* v3.24.0 防御：旧弹窗残留时（会话已被新题组替换/已退出）再点「交卷」，
+       sess 可能是 null 或已换场，直接忽略，不往 evaluate 传 null 崩掉 */
+    if (!s || s.done) return;
     var r = evaluate(s);
     var used = usedSec();
     if (s.persist && s.ms) {
@@ -2297,7 +2387,8 @@
     s.qs.forEach(function (q) {
       var c = correctOf(q), a = s.answers[q.key] || '';
       if (!c || !a) return;
-      if (a === c) correctMark(q); else addWrong(q);   /* v3.21.1 答对不移出 */
+      if (a === c) { correctMark(q); spotOnCorrect(q, s.mode); }   /* v3.24.0 交卷扫描同样过抽查判定（exam 只判难题） */
+      else addWrong(q);   /* v3.21.1 答对不移出 */
     });
     if (s.persist) {
       var snap = {};
@@ -2840,6 +2931,97 @@
       showModal('清空' + title + '？', '该操作不可撤销。', '清空', function () {
         allQs().forEach(function (q) { delete map[q.key]; });
         save(); paint();
+      });
+    });
+    paint();
+    return node;
+  }
+
+  /* ---------------- 待抽查（v3.24.0） ----------------
+     慢答/难题答对自动进池；「抽查练习」随机抽 SPOT_CFG.drawN 道再考，
+     答得又快又对攒够 passNeed 次自动出池，答错照常转进错题本。 */
+  function viewSpot() {
+    var node = cloneTpl('tpl-list');
+    $('#listTitle', node).textContent = '待抽查';
+    var desc = $('#listDesc', node);
+    var body = $('#listBody', node);
+    var ops = $('#listOps', node);
+    var bGo = $('[data-act="list-practice"]', ops);
+    var bClear = $('[data-act="list-clear"]', ops);
+    /* fmtDate 在 viewList 内部是局部函数，这里自己定义一份（与 viewNotes 同样做法） */
+    function fmtDate(t) {
+      var d = new Date(t || Date.now());
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+
+    function poolQs() {
+      return Object.keys(db.spot).map(function (k) { return QMAP[k]; }).filter(Boolean);
+    }
+    function paint() {
+      body.innerHTML = '';
+      var qs = poolQs();
+      var nSlow = 0, nHard = 0;
+      Object.keys(db.spot).forEach(function (k) {
+        var r = db.spot[k].r || {};
+        if (r.slow) nSlow++;
+        if (r.hard) nHard++;
+      });
+      desc.textContent = '共 ' + qs.length + ' 道：' + nSlow + ' 道答得慢（超过 ' +
+        Math.round(SPOT_CFG.slowMs / 1000) + ' 秒）、' + nHard + ' 道难题（多选 / 长题干）。' +
+        '抽查中 ' + Math.round(SPOT_CFG.quickMs / 1000) + ' 秒内答对、连续 ' + SPOT_CFG.passNeed +
+        ' 次自动出池；答错转进错题本。' +
+        (qs.length ? '刷题时慢题和难题会自动进来，不用手动加。' : '现在池子是空的——正常刷题时慢题和难题会自动进来。');
+      bGo.textContent = '🎲 抽查练习（随机 ' + Math.min(SPOT_CFG.drawN, qs.length) + ' 题）';
+      if (!qs.length) {
+        body.appendChild(el('div', 'empty', '池子是空的 🎉'));
+        return;
+      }
+      /* 最近触发的在前：刚暴露的薄弱点先考 */
+      qs.sort(function (a, b) { return (db.spot[b.key].last || 0) - (db.spot[a.key].last || 0); });
+      qs.forEach(function (q) {
+        var row = cloneTpl('tpl-row');
+        var tag = $('.tag', row);
+        tag.textContent = typeName(q.t);
+        tag.className = typeTagClass(q.t);
+        $('.qtext', row).textContent = gidFull(q) + ' · ' + q.q;
+        var sub = $('.qsub', row);
+        var c = correctOf(q);
+        sub.textContent = c ? ('参考答案：' + c.split('').join(' ')) : '答案未收录';
+        var s = db.spot[q.key];
+        var bits = [];
+        if (s.r && s.r.slow) bits.push('🐢 慢答 ' + s.r.slow + ' 次');
+        if (s.r && s.r.hard) bits.push('🧩 难题');
+        if (s.r && s.r.wrong) bits.push('❌ 答错 ' + s.r.wrong + ' 次');
+        var badge = el('span', 'cnt-badge', bits.join(' · ') +
+          (s.pass ? ' · 已连对 ' + s.pass + '/' + SPOT_CFG.passNeed : ''));
+        badge.title = '首次进入 ' + fmtDate(s.at) + '，最近触发 ' + fmtDate(s.last);
+        sub.appendChild(badge);
+        $('[data-act="row-go"]', row).addEventListener('click', function () {
+          beginSet([q], gidFull(q) + ' 抽查重练', 'practice');
+        });
+        $('[data-act="row-del"]', row).addEventListener('click', function () {
+          delete db.spot[q.key]; save(); paint(); paintNav();
+        });
+        body.appendChild(row);
+      });
+    }
+    bGo.addEventListener('click', function () {
+      var qs = poolQs();
+      if (!qs.length) { toast('池子是空的'); return; }
+      var pick = qs.slice();
+      for (var i = pick.length - 1; i > 0; i--) {   /* Fisher-Yates 洗牌 */
+        var j = Math.floor(Math.random() * (i + 1));
+        var t = pick[i]; pick[i] = pick[j]; pick[j] = t;
+      }
+      pick = pick.slice(0, SPOT_CFG.drawN);
+      beginSet(pick, '抽查练习（' + pick.length + ' 题 · 随机）', 'practice', true);
+    });
+    bClear.textContent = '清空抽查池';
+    bClear.addEventListener('click', function () {
+      if (!poolQs().length) return;
+      showModal('清空抽查池？', '待抽查列表将清空（错题本不受影响）。', '清空', function () {
+        db.spot = {}; save(); paint(); paintNav(); toast('抽查池已清空');
       });
     });
     paint();
@@ -3437,10 +3619,16 @@
                 var bk = d.wrongFixed[k], mk = mergedFixed[k];
                 if (bk && (!mk || (bk.c || 0) > (mk.c || 0))) mergedFixed[k] = bk;
               });
+              /* 抽查池：备份里有、本机没有的加进来（v3.24.0） */
+              var mergedSpot = db.spot || {};
+              Object.keys(d.spot || {}).forEach(function (k) {
+                if (!mergedSpot[k]) mergedSpot[k] = d.spot[k];
+              });
               db = {
                 papers: d.papers || {}, wrong: db.wrong, fav: d.fav || {},
                 wrongFixed: mergedFixed,
                 notes: mergedNotes,
+                spot: mergedSpot,
                 overrides: d.overrides || {}, history: d.history || [], settings: st
               };
               if (d.temp) db.temp = d.temp;
@@ -3472,7 +3660,7 @@
     });
     $('[data-act="key-reset-all"]', node).addEventListener('click', function () {
       showModal('重置全部进度？', '将清空题库的作答记录、错题本、收藏、笔记与历史成绩（答案修改也会清除）。', '全部清空', function () {
-        db.papers = {}; db.wrong = {}; db.wrongFixed = {}; db.fav = {}; db.notes = {}; db.history = []; db.overrides = {};
+        db.papers = {}; db.wrong = {}; db.wrongFixed = {}; db.fav = {}; db.notes = {}; db.history = []; db.overrides = {}; db.spot = {};
         save(); lastResult = null; refresh(); toast('已重置');
       });
     });
@@ -3586,6 +3774,7 @@
         sess = null;
         route = 'home';
       } else if (nav === 'wrong') { route = 'wrong'; }
+      else if (nav === 'spot') { route = 'spot'; }
       else if (nav === 'notes') { route = 'notes'; }
       else if (nav === 'key') { route = 'key'; }
       render();
